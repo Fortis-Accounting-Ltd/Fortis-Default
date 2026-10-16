@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Sign in{% endblock %}
+{% block shell %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <img src="{{ url_for('static', filename='fortis-logo.svg') }}" alt="Fortis Accounting Partners" class="logo">
+    <h1>{% if testing %}Test office sign-in{% else %}Sign in to Fortis Ledger{% endif %}</h1>
+    <p class="lead">Use your Fortis office email - the same Microsoft 365 account you use for Outlook and SharePoint.</p>
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in msgs %}<div class="flash {{ cat }}" role="status">{{ m.icon({"ok": "check", "error": "alert", "warn": "alert"}.get(cat, "info")) }}<span>{{ msg }}</span></div>{% endfor %}
+    {% endwith %}
+    {% if s and s.status == "waiting" %}
+      <div class="waiting" data-poll="{{ url_for('ui.signin_status') }}" data-done="{{ url_for('ui.signin_status', go=1) }}">
+        <span class="spinner"></span><span>Finish signing in in your web browser. This window carries on by itself.</span>
+      </div>
+      <p class="help center">No browser window? <a href="{{ s.authorize_url() }}" target="_blank" rel="noopener">Open the Microsoft sign-in</a></p>
+      <div class="actions">
+        <a class="btn primary" href="{{ url_for('ui.signin_status', go=1) }}">I've signed in</a>
+        <form method="post" action="{{ url_for('ui.signin_cancel') }}" class="inline-form">{{ m.csrf() }}<button class="btn ghost">Cancel</button></form>
+      </div>
+    {% elif not configured %}
+      <div class="flash warn">{{ m.icon("alert") }}<span>Office sign-in is not set up for this data folder. Whoever looks after Fortis Ledger sets it up in Firm settings.</span></div>
+    {% else %}
+      <form method="post" action="{{ url_for('ui.signin_start') }}">
+        {{ m.csrf() }}<input type="hidden" name="next" value="{{ next }}">
+        <button class="btn-ms">{{ m.icon("ms") }} Sign in with Microsoft</button>
+      </form>
+    {% endif %}
+    <p class="auth-foot">Only Fortis Accounting Partners accounts can sign in.{% if not testing %} · <a href="{{ url_for('ui.setup') }}">Data folder</a>{% else %} · <a href="{{ url_for('ui.firm_settings') }}">Back to Firm settings</a>{% endif %}</p>
+  </div>
+</div>
+{% endblock %}

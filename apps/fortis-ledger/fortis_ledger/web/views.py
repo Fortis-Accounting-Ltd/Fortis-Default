@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 import time
+import webbrowser
 from collections import Counter
 from pathlib import Path
 
@@ -20,20 +21,24 @@ from flask import (Blueprint, abort, current_app, flash, g, jsonify, redirect, r
                    send_file, session, url_for)
 from werkzeug.utils import secure_filename
 
-from .. import imports, reports, xero
+from .. import imports, reports, shortcut, xero
 from ..chartbook import ACCOUNT_TYPES, ChartError, ClientChart
 from ..engine import chartlib, describe, report_code_options
 from ..ledger import Ledger, LedgerError, ValidationError, journal_from_form
 from ..model import ENTITY_TYPES, Client, Journal, Line, parse_date
 from ..money import ZERO
+from ..msauth import MicrosoftConfig, MicrosoftSignIn, domains
+from ..oauth import SignInError
 from ..settings import suggest_folders
 from ..store import FolderStore, LockedError, StoreError
+from ..xero_connect import DEFAULT_PORT as XERO_PORT, SCOPES as XERO_SCOPES, XeroConfig, XeroSession, has_balances, year_ends
 from . import ENTITY_LABELS
 
 bp = Blueprint("ui", __name__)
 
 PID_RE = re.compile(r"^[0-9a-f]{16}$")
 NO_SETUP_NEEDED = {"ui.setup", "ui.quit", "ui.alive"}
+SIGNIN_OPEN = {"ui.signin", "ui.signin_start", "ui.signin_status", "ui.signin_cancel", "ui.signin_start_get"}
 LOCK_ENDPOINTS = {"ui.lock_heartbeat", "ui.lock_take", "ui.lock_release"}
 EDITABLE_KINDS = {"manual", "reversal", "opening"}
 HEARTBEAT_WRITE_SECONDS = 60
@@ -66,8 +71,39 @@ def settings():
 def store() -> FolderStore:
     if "store" not in g:
         s = settings()
-        g.store = FolderStore(s.data_folder, user=s.user_name)
+        signed = session.get("ms_user") or {}
+        g.store = FolderStore(s.data_folder, user=signed.get("email") or s.user_name)
     return g.store
+
+
+def firm() -> dict:
+    """Firm-wide settings kept in the data folder (Microsoft sign-in, the Xero app)."""
+    if "firm" not in g:
+        g.firm = store().firm_settings() if settings().configured and store().is_initialised() else {}
+    return g.firm
+
+
+def ms_config(m: dict | None = None) -> MicrosoftConfig | None:
+    m = m if m is not None else (firm().get("microsoft") or {})
+    if not m.get("tenant_id") or not m.get("client_id"):
+        return None
+    return MicrosoftConfig(m["tenant_id"], m["client_id"], list(m.get("allowed_domains") or []), cfg("MS_AUTHORITY"))
+
+
+def signin_required() -> bool:
+    return bool((firm().get("microsoft") or {}).get("required")) and ms_config() is not None
+
+
+def xero_config() -> XeroConfig | None:
+    x = firm().get("xero") or {}
+    if not x.get("client_id"):
+        return None
+    return XeroConfig(x["client_id"], int(x.get("port") or XERO_PORT), x.get("scopes") or XERO_SCOPES,
+                      cfg("XERO_ENDPOINTS"))
+
+
+def open_in_browser(url: str) -> None:
+    (current_app.config.get("BROWSER") or webbrowser.open)(url)
 
 
 def back(default: str | None = None):
@@ -173,6 +209,9 @@ def _context():
         flash("The data folder is not set up as a Fortis Ledger folder - choose it again.", "error")
         return redirect(url_for("ui.setup"))
     g.ledger = None
+    if request.endpoint not in SIGNIN_OPEN and signin_required() and not session.get("ms_user"):
+        nxt = request.full_path if request.method == "GET" and request.path != "/" else None
+        return redirect(url_for("ui.signin", next=nxt))
     if not g.slug:
         return None
     try:
@@ -1285,3 +1324,382 @@ def migrated(slug):
     if not res:
         return redirect(client_home())
     return render_template("migrated.html", res=res)
+
+
+# ---------------------------------------------------------------------------------------- #
+# who is using the app (office sign-in), shown on every screen
+# ---------------------------------------------------------------------------------------- #
+@bp.app_context_processor
+def _user_globals():
+    signed = session.get("ms_user") or {}
+    name = signed.get("name") or settings().user_name or ""
+    initials = "".join(p[0] for p in name.replace(".", " ").split()[:2]).upper() or "?"
+    try:
+        required = settings().configured and store().is_initialised() and signin_required()
+    except StoreError:
+        required = False
+    nav_tab = TAB_OF.get(request.endpoint or "") or GLOBAL_TAB.get(request.endpoint or "", "")
+    return {"user_name": name, "user_email": signed.get("email", ""), "user_initials": initials,
+            "signed_in": bool(signed), "signin_required": required, "icons_possible": shortcut.available(),
+            "nav_tab": nav_tab}
+
+
+GLOBAL_TAB = {"ui.clients": "clients", "ui.client_new": "clients", "ui.xero_home": "xero", "ui.xero_org": "xero",
+              "ui.migrate": "xero", "ui.setup": "settings", "ui.firm_settings": "settings"}
+
+
+# ---------------------------------------------------------------------------------------- #
+# sign in with the office email (Microsoft 365)
+# ---------------------------------------------------------------------------------------- #
+def _safe_next(nxt: str | None) -> str:
+    """A page of this app to go on to: a plain path, never //host, /\\host or one with spaces or control characters."""
+    if nxt and nxt.startswith("/") and not nxt.startswith("//") and not re.search(r"[\\\s\x00-\x1f\x7f]", nxt):
+        return nxt
+    return url_for("ui.clients")
+
+
+def _current(kind: str):
+    sid = session.get(f"{kind}_id")
+    return cfg("SIGNINS").get(sid) if sid else None
+
+
+def _remember_signin(kind: str, s) -> None:
+    pool = cfg("SIGNINS")
+    old = _current(kind)
+    if old is not None:
+        old.cancel()
+        pool.pop(old.id, None)
+    pool[s.id] = s
+    session[f"{kind}_id"] = s.id
+
+
+@bp.route("/signin")
+def signin():
+    if session.get("ms_user") and request.args.get("again") != "1":
+        return redirect(_safe_next(request.args.get("next")))
+    s = _current("ms")
+    return render_template("signin.html", s=s, configured=ms_config() is not None, next=request.args.get("next") or "")
+
+
+@bp.route("/signin/start", methods=["POST"])
+def signin_start():
+    pending = session.pop("ms_test", None)            # firm settings: try details before saving them
+    conf = ms_config(pending) if pending else ms_config()
+    if conf is None:
+        flash("Office sign-in is not set up yet - see Settings > Firm settings.", "error")
+        return redirect(url_for("ui.signin"))
+    try:
+        s = MicrosoftSignIn(conf, login_hint=settings().last_email)
+        s.listen()
+    except SignInError as e:
+        flash(str(e), "error")
+        return redirect(url_for("ui.signin"))
+    s.next = _safe_next(request.form.get("next"))
+    s.test_config = pending
+    _remember_signin("ms", s)
+    open_in_browser(s.authorize_url())
+    return redirect(url_for("ui.signin", next=s.next, again="1"))
+
+
+@bp.route("/signin/status")
+def signin_status():
+    s = _current("ms")
+    if s is None:
+        return jsonify({"status": "none"})
+    if s.status == "signed_in":
+        testing = bool(getattr(s, "test_config", None))
+        if testing:
+            session["ms_tested"] = {"tenant_id": s.cfg.tenant_id, "client_id": s.cfg.client_id, "email": s.user["email"]}
+        if not (testing and session.get("ms_user")):      # a test from Firm settings does not change who is signed in
+            session["ms_user"] = s.user
+            st = settings()
+            st.last_email, st.user_name = s.user["email"], s.user["name"]
+            try:
+                st.save()
+            except OSError:
+                pass
+        cfg("SIGNINS").pop(s.id, None)
+        session.pop("ms_id", None)
+        target = url_for("ui.firm_settings") if testing else s.next
+        if request.args.get("go") == "1":
+            return redirect(target)
+        return jsonify({"status": "signed_in", "next": target, "email": s.user["email"]})
+    if request.args.get("go") == "1":
+        if s.status == "error":
+            flash(s.error, "error")
+        return redirect(url_for("ui.signin", again="1"))
+    return jsonify({"status": s.status, "error": s.error})
+
+
+@bp.route("/signin/cancel", methods=["POST"])
+def signin_cancel():
+    s = _current("ms")
+    if s is not None:
+        s.cancel()
+        cfg("SIGNINS").pop(s.id, None)
+    session.pop("ms_id", None)
+    return redirect(url_for("ui.signin", again="1"))
+
+
+@bp.route("/signout", methods=["POST"])
+def signout():
+    st = store()
+    for slug in list(cfg("OPEN_CLIENTS")):        # the edit locks belong to the account signing out
+        st.release_lock(slug)
+        cfg("OPEN_CLIENTS").discard(slug)
+    session.pop("ms_user", None)
+    session.pop("ms_tested", None)
+    flash("Signed out.", "ok")
+    return redirect(url_for("ui.signin", again="1") if signin_required() else url_for("ui.clients"))
+
+
+# ---------------------------------------------------------------------------------------- #
+# firm settings: office sign-in, the Xero app, desktop icons
+# ---------------------------------------------------------------------------------------- #
+@bp.route("/firm", methods=["GET", "POST"])
+def firm_settings():
+    st = store()
+    f = firm()
+    if request.method == "POST":
+        op = request.form.get("op") or ""
+        if op in ("ms_test", "ms_save"):
+            m = {"tenant_id": (request.form.get("tenant_id") or "").strip(),
+                 "client_id": (request.form.get("ms_client_id") or "").strip(),
+                 "allowed_domains": domains(request.form.get("allowed_domains") or "")}
+            try:
+                MicrosoftConfig(m["tenant_id"], m["client_id"]).check()
+            except SignInError as e:
+                flash(str(e), "error")
+                return render_template("firm.html", f=f, form=request.form, xero_scopes=XERO_SCOPES, xero_port=XERO_PORT)
+            if op == "ms_test":
+                session["ms_test"] = m
+                return redirect(url_for("ui.signin_start_get"))
+            tested = session.get("ms_tested") or {}
+            required = request.form.get("required") == "yes"
+            same = tested.get("tenant_id") == m["tenant_id"] and tested.get("client_id") == m["client_id"]
+            if required and not same:
+                flash("Sign in once with these details (Test sign-in) before making sign-in required - "
+                      "so nobody is locked out by a typing mistake.", "error")
+                return render_template("firm.html", f=f, form=request.form, xero_scopes=XERO_SCOPES, xero_port=XERO_PORT)
+            st.save_firm_settings({"microsoft": {**m, "required": required}})
+            flash("Office sign-in " + ("is now required on every PC that uses this data folder." if required
+                                       else "details saved (sign-in is not required yet)."), "ok")
+            return redirect(url_for("ui.firm_settings"))
+        if op == "ms_off":
+            m = dict(f.get("microsoft") or {})
+            m["required"] = False
+            st.save_firm_settings({"microsoft": m})
+            flash("Office sign-in is no longer required.", "warn")
+            return redirect(url_for("ui.firm_settings"))
+        if op == "xero_save":
+            cid = (request.form.get("xero_client_id") or "").strip()
+            port = request.form.get("xero_port", type=int) or XERO_PORT
+            if cid and not re.fullmatch(r"[A-Za-z0-9]{16,64}", cid):
+                flash("The Xero client ID is the long code on the app's Configuration page in developer.xero.com.", "error")
+                return render_template("firm.html", f=f, form=request.form, xero_scopes=XERO_SCOPES, xero_port=XERO_PORT)
+            if not (1024 <= port <= 65535):
+                flash("The port must be between 1024 and 65535.", "error")
+                return render_template("firm.html", f=f, form=request.form, xero_scopes=XERO_SCOPES, xero_port=XERO_PORT)
+            st.save_firm_settings({"xero": {"client_id": cid, "port": port} if cid else None})
+            flash("Xero connection saved." if cid else "Xero connection removed.", "ok")
+            return redirect(url_for("ui.firm_settings"))
+        abort(400)
+    m = f.get("microsoft") or {}
+    x = f.get("xero") or {}
+    form = {"tenant_id": m.get("tenant_id", ""), "ms_client_id": m.get("client_id", ""),
+            "allowed_domains": ", ".join(m.get("allowed_domains") or []), "required": "yes" if m.get("required") else "",
+            "xero_client_id": x.get("client_id", ""), "xero_port": x.get("port", XERO_PORT)}
+    if not form["allowed_domains"] and (session.get("ms_user") or {}).get("email"):
+        form["allowed_domains"] = session["ms_user"]["email"].rsplit("@", 1)[1]
+    return render_template("firm.html", f=f, form=form, xero_scopes=XERO_SCOPES, xero_port=XERO_PORT,
+                           tested=session.get("ms_tested") or {})
+
+
+@bp.route("/signin/test")
+def signin_start_get():
+    """Firm settings 'Test sign-in': start a sign-in with the details not saved yet."""
+    pending = session.get("ms_test")
+    if not pending:
+        return redirect(url_for("ui.firm_settings"))
+    return render_template("signin.html", s=None, configured=True, next=url_for("ui.firm_settings"), testing=True)
+
+
+@bp.route("/desktop-icon", methods=["POST"])
+def desktop_icon():
+    kind = request.form.get("kind") or "app"
+    if kind not in shortcut.ICONS:
+        abort(400)
+    try:
+        path = (current_app.config.get("SHORTCUT") or shortcut.create)(kind)
+    except shortcut.ShortcutError as e:
+        flash(str(e), "error")
+    else:
+        st = settings()
+        if kind not in st.icons_made:
+            st.icons_made.append(kind)
+            st.save()
+        flash(f"Icon put on the desktop: {path}", "ok")
+    return back(url_for("ui.firm_settings"))
+
+
+# ---------------------------------------------------------------------------------------- #
+# connect to Xero
+# ---------------------------------------------------------------------------------------- #
+def _xero() -> XeroSession | None:
+    s = _current("xero")
+    return s if isinstance(s, XeroSession) else None
+
+
+def _existing_by_tenant() -> dict[str, object]:
+    out = {}
+    for c in store().list_clients():
+        tid = (c.source or {}).get("xero_organisation_id")
+        if tid:
+            out[tid] = c
+    return out
+
+
+@bp.route("/xero")
+def xero_home():
+    s = _xero()
+    return render_template("xero.html", conf=xero_config(), s=s, existing=_existing_by_tenant(),
+                           redirect_uri=xero_config().redirect_uri if xero_config() else
+                           f"http://localhost:{XERO_PORT}/callback", scopes=XERO_SCOPES)
+
+
+@bp.route("/xero/connect", methods=["POST"])
+def xero_connect():
+    conf = xero_config()
+    if conf is None:
+        flash("Set up the firm's Xero app first (Settings > Firm settings).", "error")
+        return redirect(url_for("ui.xero_home"))
+    try:
+        s = XeroSession(conf)
+        s.listen()
+    except SignInError as e:
+        flash(str(e), "error")
+        return redirect(url_for("ui.xero_home"))
+    _remember_signin("xero", s)
+    open_in_browser(s.authorize_url())
+    return redirect(url_for("ui.xero_home"))
+
+
+@bp.route("/xero/status")
+def xero_status():
+    s = _xero()
+    if request.args.get("go") == "1":
+        if s is not None and s.status == "error":
+            flash(s.error, "error")
+        return redirect(url_for("ui.xero_home"))
+    if s is None:
+        return jsonify({"status": "none"})
+    return jsonify({"status": s.status, "error": s.error, "organisations": len(s.tenants)})
+
+
+@bp.route("/xero/cancel", methods=["POST"])
+def xero_cancel():
+    s = _xero()
+    if s is not None:
+        s.cancel()
+        cfg("SIGNINS").pop(s.id, None)
+    session.pop("xero_id", None)
+    return redirect(url_for("ui.xero_home"))
+
+
+def _signed_in_xero() -> XeroSession:
+    s = _xero()
+    if s is None or s.status != "signed_in":
+        raise SignInError("connect to Xero first")
+    return s
+
+
+@bp.route("/xero/org/<tenant_id>", methods=["GET", "POST"])
+def xero_org(tenant_id):
+    try:
+        s = _signed_in_xero()
+        t = s.tenant(tenant_id)
+        org_json = s.organisation(tenant_id)
+    except SignInError as e:
+        flash(str(e), "error")
+        return redirect(url_for("ui.xero_home"))
+    fields = xero.client_fields_from_org(org_json) if (org_json.get("Organisations") or [None])[0] else {}
+    ends = year_ends(fields.get("fy_end_month", 6), fields.get("fy_end_day", 30), count=5)
+    existing = _existing_by_tenant().get(tenant_id)
+    if request.method == "GET":
+        form = {"name": fields.get("name") or t.get("tenantName", ""), "type": fields.get("type") or "company",
+                "legal_name": fields.get("legal_name", ""), "abn": fields.get("abn", "")}
+        return render_template("xero_org.html", t=t, org=(org_json.get("Organisations") or [{}])[0], fields=fields,
+                               ends=ends, picked={e.isoformat() for e in ends[-2:]}, form=form, existing=existing)
+    f = request.form
+    picked = sorted(e for e in ends if e.isoformat() in f.getlist("years"))
+    errors = []
+    if not picked:
+        errors.append("Tick at least one year end to bring across.")
+    if existing and f.get("again") != "yes":
+        errors.append(f"{t.get('tenantName')} is already in the ledger as {existing.name} - tick "
+                      f"'bring it across again as a new client' to go ahead.")
+    etype = f.get("type") or ""
+    if etype not in ENTITY_TYPES:
+        errors.append("Choose the entity type.")
+    if errors:
+        for e in errors:
+            flash(e, "error")
+        return render_template("xero_org.html", t=t, org=(org_json.get("Organisations") or [{}])[0], fields=fields,
+                               ends=ends, picked={e.isoformat() for e in picked}, form=f, existing=existing), 400
+    try:
+        accounts_json = s.accounts(tenant_id)
+        tbs, skipped = {}, []
+        for end in picked:
+            tb = s.trial_balance(tenant_id, end)
+            fy = end.year            # a year end falls in the financial year it ends (FY2026 ends in 2026)
+            if has_balances(tb):
+                tbs[fy] = tb
+            else:
+                skipped.append(end)
+        if not tbs:
+            raise SignInError("Xero has no balances at the chosen year ends")
+        overrides = {"name": (f.get("name") or "").strip(), "type": etype, "legal_name": (f.get("legal_name") or "").strip(),
+                     "abn": xero.format_abn(f.get("abn") or ""),
+                     "directors": [x.strip() for x in (f.get("directors") or "").splitlines() if x.strip()]}
+        work = work_dir() / f"xero-{secrets.token_hex(4)}"
+        work.mkdir(parents=True, exist_ok=True)
+        try:
+            client, results = xero.migrate_from_api(store(), org_json, accounts_json, tbs, work, overrides)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+    except (SignInError, LedgerError, StoreError, ValueError) as e:
+        flash(f"Nothing was brought across: {e}", "error")
+        return redirect(url_for("ui.xero_org", tenant_id=tenant_id))
+    store().audit(client.slug, "xero.imported", {"organisation": t.get("tenantName"), "tenant_id": tenant_id,
+                                                 "years": sorted(tbs), "xero_user": s.user.get("email", "")})
+    disconnected = False
+    if f.get("disconnect") == "yes":
+        try:
+            s.disconnect(tenant_id)
+            disconnected = True
+        except SignInError as e:
+            flash(f"Brought across, but could not disconnect it from Xero: {e}", "warn")
+    summary = []
+    for r in results:
+        plan = r["plan"]
+        summary.append({"fy": r["fy"], "journals": r["result"]["journals"], "created": r["result"]["created_accounts"],
+                        "warnings": plan.warnings,
+                        "review": [{"name": pl.source_name, "account": pl.account, "report_code": pl.report_code,
+                                    "reason": pl.reason} for pl in plan.lines if pl.review and pl.action != "skip"]})
+    rid = remember({"years": summary, "skipped": [f"{d:%d/%m/%Y}" for d in skipped], "disconnected": disconnected,
+                    "organisation": t.get("tenantName")})
+    flash(f"{client.name} brought across from Xero: {len(results)} year(s)"
+          + (" - and disconnected from Xero." if disconnected else "."), "ok")
+    return redirect(url_for("ui.migrated", slug=client.slug, r=rid))
+
+
+@bp.route("/xero/org/<tenant_id>/disconnect", methods=["POST"])
+def xero_disconnect(tenant_id):
+    try:
+        s = _signed_in_xero()
+        name = s.tenant(tenant_id).get("tenantName", "")
+        s.disconnect(tenant_id)
+        flash(f"{name} disconnected from Fortis Ledger's Xero app.", "ok")
+    except SignInError as e:
+        flash(str(e), "error")
+    return redirect(url_for("ui.xero_home"))

@@ -6,6 +6,8 @@
   <div class="actions"><a class="btn primary" href="{{ url_for('ui.overview', slug=client.slug) }}">Go to the client</a></div>
 </div>
 <p>Compare each year's trial balance with the one from Xero, then generate the Financial Reports.</p>
+{% if res.get("skipped") %}<div class="flash info">{{ m.icon("info") }}<span>No balances in Xero at {{ res.skipped|join(", ") }} - those years were left out.</span></div>{% endif %}
+{% if res.get("disconnected") %}<div class="flash ok">{{ m.icon("check") }}<span>{{ res.organisation }} was disconnected from Fortis Ledger's Xero app (nothing in the Xero file changed).</span></div>{% endif %}
 {% for y in res.years %}
 <div class="panel">
   <h2>FY{{ y.fy }}</h2>

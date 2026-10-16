@@ -32,6 +32,8 @@ class Settings:
     data_folder: str = ""
     user_name: str = ""
     recent: list[str] = field(default_factory=list)   # client slugs, most recent first
+    icons_made: list[str] = field(default_factory=list)   # desktop icons already put on this PC's desktop
+    last_email: str = ""                                  # last office account signed in (offered next time)
 
     @classmethod
     def path(cls) -> Path:

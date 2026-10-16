@@ -1,0 +1,78 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Connect to Xero{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Connect to Xero</h1>
+    <p class="muted">Bring a client's chart of accounts and year-end balances straight from Xero. Read only - nothing in Xero changes.</p></div>
+  <div class="actions"><a class="btn" href="{{ url_for('ui.migrate') }}">Use Xero export files instead</a></div>
+</div>
+
+{% if not conf %}
+<div class="panel narrow">
+  <div class="feature"><span class="feature-icon">{{ m.icon("link") }}</span>
+    <div><h2>The firm's Xero app is not set up yet</h2>
+      <p>It takes about 5 minutes at developer.xero.com and is free. The steps are in
+        <a href="{{ url_for('ui.firm_settings') }}">Firm settings</a> - redirect URI <code>{{ redirect_uri }}</code>.</p></div></div>
+</div>
+
+{% elif s and s.status == "waiting" %}
+<div class="panel narrow">
+  <div class="waiting" data-poll="{{ url_for('ui.xero_status') }}" data-done="{{ url_for('ui.xero_status', go=1) }}">
+    <span class="spinner"></span><span>Sign in to Xero in your web browser and tick the organisations to connect. This window carries on by itself.</span>
+  </div>
+  <p class="help">No browser window? <a href="{{ s.authorize_url() }}" target="_blank" rel="noopener">Open the Xero sign-in</a></p>
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('ui.xero_status', go=1) }}">I've finished in Xero</a>
+    <form method="post" action="{{ url_for('ui.xero_cancel') }}" class="inline-form">{{ m.csrf() }}<button class="btn ghost">Cancel</button></form>
+  </div>
+</div>
+
+{% elif s and s.status == "signed_in" %}
+<div class="toolbar">
+  <span class="badge ok">{{ m.icon("check") }} Connected{% if s.user.get("email") %} as {{ s.user.email }}{% endif %}</span>
+  <span class="muted small">{{ s.tenants|length }} organisation{{ "s" if s.tenants|length != 1 }} · the connection lasts 30 minutes</span>
+  <span class="spacer"></span>
+  <form method="post" action="{{ url_for('ui.xero_cancel') }}" class="inline-form">{{ m.csrf() }}<button class="btn small">Finish</button></form>
+</div>
+<table class="grid">
+  <thead><tr><th>Organisation</th><th>In Fortis Ledger</th><th></th></tr></thead>
+  <tbody>
+  {% for t in s.tenants %}
+  {% set ex = existing.get(t.tenantId) %}
+  <tr>
+    <td><div class="name-cell"><span class="avatar">{{ m.initials(t.tenantName) }}</span><strong>{{ t.tenantName }}</strong></div></td>
+    <td>{% if ex %}<a href="{{ url_for('ui.overview', slug=ex.slug) }}">{{ ex.name }}</a>{% else %}<span class="muted">Not yet</span>{% endif %}</td>
+    <td class="right nowrap">
+      <a class="btn primary small" href="{{ url_for('ui.xero_org', tenant_id=t.tenantId) }}">Bring across {{ m.icon("arrow-right") }}</a>
+      <form method="post" action="{{ url_for('ui.xero_disconnect', tenant_id=t.tenantId) }}" class="inline-form"
+            data-confirm="Disconnect {{ t.tenantName }} from Fortis Ledger's Xero app? Nothing in the Xero file changes.">{{ m.csrf() }}<button class="btn small ghost">Disconnect</button></form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="3" class="empty">No organisations were connected. Connect again and tick at least one organisation in Xero.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="help">Xero's free tier allows 5 connected organisations at a time - disconnect each one once it is in the ledger.</p>
+
+{% else %}
+<div class="cards two">
+  <div class="card">
+    <div class="feature"><span class="feature-icon">{{ m.icon("link") }}</span>
+      <div><h2>Connect</h2>
+        <p class="help">Your web browser opens Xero's sign-in. Sign in with your own Xero login and tick the client organisations to connect, then come back here.</p></div></div>
+    <form method="post" action="{{ url_for('ui.xero_connect') }}">{{ m.csrf() }}
+      <button class="btn primary large">{{ m.icon("link") }} Connect to Xero</button></form>
+  </div>
+  <div class="card">
+    <h2>What comes across</h2>
+    <ul class="checklist">
+      <li class="ok">The client's own chart of accounts, with Xero's report codes</li>
+      <li class="ok">The trial balance at each year end you pick - closing balances match Xero exactly</li>
+      <li class="warn">Not the individual transactions - keep Xero's General Ledger export in the client's file</li>
+    </ul>
+    <p class="help">Do this before the client's Xero subscription is cancelled.</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

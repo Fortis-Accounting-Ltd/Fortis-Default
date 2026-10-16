@@ -1,0 +1,94 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Firm settings{% endblock %}
+{% block content %}
+{% set ms = f.get("microsoft") or {} %}{% set xr = f.get("xero") or {} %}{% set tested = tested or {} %}
+<div class="page-head">
+  <div><h1>Firm settings</h1><p class="muted">Shared by everyone who uses this data folder.</p></div>
+</div>
+
+<div class="cards two">
+  <form class="card" method="post" action="{{ url_for('ui.firm_settings') }}">
+    {{ m.csrf() }}
+    <div class="feature"><span class="feature-icon">{{ m.icon("mail") }}</span>
+      <div><h2>Sign in with office email</h2>
+        <p class="help">Everyone signs in with their Fortis Microsoft 365 account. The change log and the "who is editing" notice then show the verified email.</p></div></div>
+    <p>{% if ms.get("required") %}<span class="badge ok">{{ m.icon("check") }} Required on every PC</span>
+       {% elif ms.get("tenant_id") %}<span class="badge info">Set up - not required yet</span>
+       {% else %}<span class="badge light">Not set up</span>{% endif %}
+       {% if tested.get("tenant_id") %} <span class="badge ok">Tested: {{ tested.get("email") or user_email }}</span>{% endif %}</p>
+    <details>
+      <summary>How to set it up (about 10 minutes, needs a Microsoft 365 admin)</summary>
+      <ol class="steps small">
+        <li>Open <strong>entra.microsoft.com</strong> &gt; Applications &gt; App registrations &gt; <strong>New registration</strong>.</li>
+        <li>Name: <code>Fortis Ledger</code>. Supported account types: <strong>Accounts in this organizational directory only</strong>.</li>
+        <li>Redirect URI: platform <strong>Public client/native (mobile &amp; desktop)</strong>, URI <code>http://localhost</code>. Register.</li>
+        <li>On the app's Overview page copy the <strong>Application (client) ID</strong> and <strong>Directory (tenant) ID</strong> into the boxes below.</li>
+        <li>Optional: Enterprise applications &gt; Fortis Ledger &gt; Properties &gt; <em>Assignment required</em> = Yes, then add only the people who should use it.</li>
+      </ol>
+      <p class="help">No password or client secret is involved.</p>
+    </details>
+    <div class="form-grid compact">
+      <label for="tenant_id">Directory (tenant) ID</label><input id="tenant_id" name="tenant_id" value="{{ form.get('tenant_id', '') }}" class="mono" placeholder="00000000-0000-0000-0000-000000000000">
+      <label for="ms_client_id">Application (client) ID</label><input id="ms_client_id" name="ms_client_id" value="{{ form.get('ms_client_id', '') }}" class="mono" placeholder="00000000-0000-0000-0000-000000000000">
+      <label for="allowed_domains">Email domains</label>
+      <div><input id="allowed_domains" name="allowed_domains" value="{{ form.get('allowed_domains', '') }}" placeholder="fortisap.com.au">
+        <span class="help">Only these email addresses can sign in (blank = any account in your Microsoft 365).</span></div>
+    </div>
+    <label class="check"><input type="checkbox" name="required" value="yes"{% if form.get('required') == 'yes' %} checked{% endif %}> Require sign-in on every PC</label>
+    <p class="help">Test the sign-in first - the app only lets you require it after one successful sign-in with these details, so nobody is locked out by a typing mistake.</p>
+    <div class="actions">
+      <button class="btn" name="op" value="ms_test">{{ m.icon("ms") }} Test sign-in</button>
+      <button class="btn primary" name="op" value="ms_save">Save</button>
+    </div>
+  </form>
+
+  <form class="card" method="post" action="{{ url_for('ui.firm_settings') }}">
+    {{ m.csrf() }}
+    <div class="feature"><span class="feature-icon">{{ m.icon("link") }}</span>
+      <div><h2>Xero connection</h2>
+        <p class="help">Lets staff bring a client's chart and year-end balances straight from Xero (read only).</p></div></div>
+    <p>{% if xr.get("client_id") %}<span class="badge ok">{{ m.icon("check") }} Set up</span>{% else %}<span class="badge light">Not set up</span>{% endif %}</p>
+    <details>
+      <summary>How to set it up (5 minutes, free)</summary>
+      <ol class="steps small">
+        <li>Sign in at <strong>developer.xero.com</strong> &gt; My Apps &gt; <strong>New app</strong>.</li>
+        <li>App name <code>Fortis Ledger</code>, integration type <strong>Mobile or desktop app</strong>, company URL <code>https://fortisap.com.au</code>.</li>
+        <li>Redirect URI: <code>http://localhost:{{ form.get('xero_port') or xero_port }}/callback</code>. Create the app.</li>
+        <li>On the app's Configuration page copy the <strong>Client id</strong> into the box below. (Desktop apps have no client secret.)</li>
+      </ol>
+      <p class="help">Permissions asked for: <code>{{ xero_scopes }}</code> - reading settings, the chart of accounts and the trial balance only.
+        Xero's free tier allows 5 connected organisations at a time; the app can disconnect each one after it is brought across.</p>
+    </details>
+    <div class="form-grid compact">
+      <label for="xero_client_id">Client id</label><input id="xero_client_id" name="xero_client_id" value="{{ form.get('xero_client_id', '') }}" class="mono">
+      <label for="xero_port">Port</label>
+      <div><input id="xero_port" name="xero_port" value="{{ form.get('xero_port') or xero_port }}" class="short" inputmode="numeric">
+        <span class="help">Must match the redirect URI in the Xero app. Leave as {{ xero_port }} unless another program uses it.</span></div>
+    </div>
+    <div class="actions"><button class="btn primary" name="op" value="xero_save">Save</button>
+      {% if xr.get("client_id") %}<a class="btn" href="{{ url_for('ui.xero_home') }}">Connect to Xero {{ m.icon("arrow-right") }}</a>{% endif %}</div>
+  </form>
+
+  <div class="card">
+    <div class="feature"><span class="feature-icon">{{ m.icon("desktop") }}</span>
+      <div><h2>Desktop icons</h2><p class="help">Shortcuts on this PC's desktop. The app also puts its own icon there the first time it runs.</p></div></div>
+    {% if icons_possible %}
+    <div class="actions">
+      <form method="post" action="{{ url_for('ui.desktop_icon') }}" class="inline-form">{{ m.csrf() }}<input type="hidden" name="kind" value="app"><button class="btn">{{ m.icon("desktop") }} Fortis Ledger icon</button></form>
+      <form method="post" action="{{ url_for('ui.desktop_icon') }}" class="inline-form">{{ m.csrf() }}<input type="hidden" name="kind" value="xero"><button class="btn">{{ m.icon("link") }} "Connect to Xero" icon</button></form>
+    </div>
+    {% else %}
+    <p class="muted">Desktop icons are made on Windows.</p>
+    {% endif %}
+  </div>
+
+  {% if ms.get("required") %}
+  <form class="card" method="post" action="{{ url_for('ui.firm_settings') }}" data-confirm="Stop requiring office sign-in? Anyone with the data folder could then open the app with a typed name.">
+    {{ m.csrf() }}
+    <h2>Stop requiring sign-in</h2>
+    <p class="help">Turns office sign-in off for every PC. The details above are kept.</p>
+    <div class="actions"><button class="btn danger" name="op" value="ms_off">Stop requiring sign-in</button></div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

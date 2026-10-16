@@ -31,4 +31,22 @@
   <div class="actions"><button class="btn primary">Save</button>
     {% if settings.configured %}<a class="btn" href="{{ url_for('ui.clients') }}">Cancel</a>{% endif %}</div>
 </form>
+{% if settings.configured %}
+<div class="cards two">
+  <a class="card link-card" href="{{ url_for('ui.firm_settings') }}">
+    <span class="feature-icon">{{ m.icon("building") }}</span>
+    <span class="lc-text"><strong>Firm settings</strong><span class="muted small">Office email sign-in, the Xero connection, desktop icons</span></span>
+  </a>
+  {% if icons_possible %}
+  <div class="card">
+    <div class="feature"><span class="feature-icon">{{ m.icon("desktop") }}</span>
+      <div><strong>Desktop icons</strong><p class="help">Put shortcuts on this PC's desktop.</p></div></div>
+    <div class="actions">
+      <form method="post" action="{{ url_for('ui.desktop_icon') }}" class="inline-form">{{ m.csrf() }}<input type="hidden" name="kind" value="app"><button class="btn small">Fortis Ledger</button></form>
+      <form method="post" action="{{ url_for('ui.desktop_icon') }}" class="inline-form">{{ m.csrf() }}<input type="hidden" name="kind" value="xero"><button class="btn small">Connect to Xero</button></form>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

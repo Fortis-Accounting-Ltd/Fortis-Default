@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}{{ t.tenantName }}{% endblock %}
+{% block content %}
+{% set months = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] %}
+<div class="page-head">
+  <div class="name-cell"><span class="avatar lg">{{ m.initials(t.tenantName) }}</span>
+    <div><h1>{{ t.tenantName }}</h1>
+      <p class="muted">{% if org.get("LegalName") and org.get("LegalName") != t.tenantName %}{{ org.LegalName }} · {% endif %}{{ (fields.get("type") or "company")|entity }}{% if fields.get("abn") %} · ABN {{ fields.abn }}{% endif %}
+        · year ends {{ fields.get("fy_end_day", 30) }} {{ months[fields.get("fy_end_month", 6)] }}{% if org.get("Class") %} · Xero plan {{ org.Class|replace("_", " ")|title }}{% endif %}</p></div></div>
+  <div class="actions"><a class="btn" href="{{ url_for('ui.xero_home') }}">Back</a></div>
+</div>
+{% if existing %}<div class="flash warn">{{ m.icon("alert") }}<span>Already in Fortis Ledger as <a href="{{ url_for('ui.overview', slug=existing.slug) }}">{{ existing.name }}</a>.</span></div>{% endif %}
+<form method="post" class="panel">
+  {{ m.csrf() }}
+  <h2>The client</h2>
+  <div class="form-grid">
+    <label for="name">Name</label><input id="name" name="name" value="{{ form.get('name', '') }}" required>
+    <label for="type">Entity type</label>
+    <select id="type" name="type">{% for k, v in ENTITY_LABELS.items() %}<option value="{{ k }}"{% if form.get('type') == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+    <label for="legal_name">Legal name</label><input id="legal_name" name="legal_name" value="{{ form.get('legal_name', '') }}">
+    <label for="abn">ABN</label><input id="abn" name="abn" value="{{ form.get('abn', '') }}">
+    <label for="directors">Signatories</label>
+    <div><textarea id="directors" name="directors" rows="2" placeholder="One per line">{{ form.get('directors', '') }}</textarea>
+      <span class="help">Directors, the trustee's directors, partners or the proprietor - they sign the declaration.</span></div>
+  </div>
+  <h2>Year ends to bring across</h2>
+  <div class="inline">
+    {% for e in ends|reverse %}
+    <label class="check"><input type="checkbox" name="years" value="{{ e.isoformat() }}"{% if e.isoformat() in picked %} checked{% endif %}> FY{{ e.year }} <span class="muted">({{ e|dmy }})</span></label>
+    {% endfor %}
+  </div>
+  <p class="help">Each year end's trial balance becomes one import journal, so the closing balances match Xero exactly. Pick at least last year and this year, for comparatives.</p>
+  <label class="check"><input type="checkbox" name="disconnect" value="yes" checked> Disconnect it from Fortis Ledger's Xero app afterwards (frees one of the 5 free connections)</label>
+  {% if existing %}<label class="check attention"><input type="checkbox" name="again" value="yes"> Bring it across again as a new client</label>{% endif %}
+  <div class="actions"><button class="btn primary large">{{ m.icon("import") }} Bring across into Fortis Ledger</button></div>
+</form>
+{% endblock %}

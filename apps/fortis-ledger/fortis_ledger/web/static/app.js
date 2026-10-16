@@ -106,6 +106,28 @@
     }, 60000);
   }
 
+  // sign-in in the browser (Microsoft 365, Xero): carry on by itself once it is finished there
+  document.querySelectorAll("[data-poll]").forEach(function (el) {
+    var url = el.getAttribute("data-poll"), done = el.getAttribute("data-done");
+    var timer = setInterval(function () {
+      fetch(url, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d || d.status === "waiting") return;
+          clearInterval(timer);
+          window.location.href = (d.status === "signed_in" && d.next) ? d.next : done;
+        })
+        .catch(function () { /* try again on the next tick */ });
+    }, 1500);
+  });
+
+  // close the user menu when clicking elsewhere
+  document.addEventListener("click", function (ev) {
+    document.querySelectorAll("details.user-menu[open]").forEach(function (d) {
+      if (!d.contains(ev.target)) d.removeAttribute("open");
+    });
+  });
+
   // browser mode: tell the app a page is still open (it stops itself when nothing is)
   var alive = document.body.getAttribute("data-alive");
   if (alive) {

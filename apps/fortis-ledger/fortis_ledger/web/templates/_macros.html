@@ -6,6 +6,18 @@
 <input type="hidden" name="fy" value="{{ fy }}">
 {%- endmacro %}
 
+{% macro icon(name, cls="ic") -%}
+<svg class="{{ cls }}" aria-hidden="true" focusable="false"><use href="#i-{{ name }}"></use></svg>
+{%- endmacro %}
+
+{% macro nav(key, href, label, icon_name, current) -%}
+<a href="{{ href }}" class="nav-item{% if current == key %} active{% endif %}"{% if current == key %} aria-current="page"{% endif %} title="{{ label }}">{{ icon(icon_name) }}<span>{{ label }}</span></a>
+{%- endmacro %}
+
+{% macro initials(name) -%}
+{{ (name or "?").replace("&", " ").replace(".", " ").split()[:2]|map("first")|join|upper }}
+{%- endmacro %}
+
 {% macro post_button(action, label, cls="btn", confirm=None, fields=None, disabled=False) -%}
 <form method="post" action="{{ action }}" class="inline-form"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
   {{ csrf() }}

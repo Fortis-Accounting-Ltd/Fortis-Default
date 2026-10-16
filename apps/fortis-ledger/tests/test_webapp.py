@@ -104,11 +104,11 @@ def test_setup_creates_the_data_folder(tmp_path, monkeypatch):
     assert c.get("/").headers["Location"].endswith("/setup")
     target = tmp_path / "Fortis Ledger - Documents"
     target.mkdir()
-    r = post(c, "/setup", {"data_folder": str(target), "user_name": "Rehman"})
+    r = post(c, "/setup", {"data_folder": str(target), "user_name": "Alex"})
     assert r.status_code == 200 and "not a Fortis Ledger data folder yet" in text(r)
-    r = post(c, "/setup", {"data_folder": str(target), "user_name": "Rehman", "create": "yes"})
+    r = post(c, "/setup", {"data_folder": str(target), "user_name": "Alex", "create": "yes"})
     assert r.status_code == 302 and (target / "fortis-ledger.json").exists()
-    assert Settings.load().data_folder == str(target) and Settings.load().user_name == "Rehman"
+    assert Settings.load().data_folder == str(target) and Settings.load().user_name == "Alex"
     assert c.get("/").status_code == 200
 
 

@@ -4,8 +4,9 @@
 <div class="page-head">
   <h1>Clients</h1>
   <div class="actions">
-    <a class="btn primary" href="{{ url_for('ui.client_new') }}">New client</a>
-    <a class="btn" href="{{ url_for('ui.migrate') }}">Move a client from Xero</a>
+    <a class="btn" href="{{ url_for('ui.xero_home') }}">{{ m.icon("link") }} Connect to Xero</a>
+    <a class="btn" href="{{ url_for('ui.migrate') }}">Move from Xero files</a>
+    <a class="btn primary" href="{{ url_for('ui.client_new') }}">{{ m.icon("plus") }} New client</a>
   </div>
 </div>
 <form method="get" class="toolbar">
@@ -18,9 +19,10 @@
 <div class="cards">
   {% for r in recent %}
   <a class="card link-card" href="{{ url_for('ui.overview', slug=r.c.slug) }}">
-    <strong>{{ r.c.name }}</strong>
-    <span class="muted">{{ r.c.type|entity }}{% if r.years %} · FY{{ r.years[-1] }}{% endif %}</span>
-    {% if r.lock %}<span class="badge locked">{{ r.lock.user }} is editing</span>{% endif %}
+    <span class="avatar lg">{{ m.initials(r.c.name) }}</span>
+    <span class="lc-text"><strong>{{ r.c.name }}</strong>
+      <span class="muted small">{{ r.c.type|entity }}{% if r.years %} · FY{{ r.years[-1] }}{% endif %}</span>
+      {% if r.lock %}<span class="badge locked">{{ r.lock.user }} is editing</span>{% endif %}</span>
   </a>
   {% endfor %}
 </div>
@@ -31,8 +33,8 @@
   <tbody>
   {% for r in rows %}
   <tr>
-    <td><a href="{{ url_for('ui.overview', slug=r.c.slug) }}">{{ r.c.name }}</a>
-      {% if r.c.legal_name and r.c.legal_name != r.c.name %}<div class="muted small">{{ r.c.legal_name }}</div>{% endif %}</td>
+    <td><div class="name-cell"><span class="avatar">{{ m.initials(r.c.name) }}</span><div><a href="{{ url_for('ui.overview', slug=r.c.slug) }}"><strong>{{ r.c.name }}</strong></a>
+      {% if r.c.legal_name and r.c.legal_name != r.c.name %}<div class="muted small">{{ r.c.legal_name }}</div>{% endif %}</div></div></td>
     <td>{{ r.c.type|entity }}</td>
     <td class="nowrap">{{ r.c.abn }}</td>
     <td class="nowrap">{% if r.years %}FY{{ r.years[0] }}{% if r.years|length > 1 %} – FY{{ r.years[-1] }}{% endif %}{% else %}<span class="muted">none yet</span>{% endif %}</td>

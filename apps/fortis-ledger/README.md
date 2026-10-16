@@ -22,7 +22,9 @@ changes the skill. The two are separate from now on: a change to one does not re
 | **Reports** | **Financial Reports** pack (PDF, the firm's Xero template, with comparatives from the ledger; DRAFT stamp until marked final). **Trial Balance**, **General Ledger** and **Journal Report** (PDF or Excel). All are saved in the client's folder in SharePoint. The trial balance and account transactions can also be viewed on screen, with drill-down to each journal. |
 | **Change log** | Every change records who made it, when, on which PC, and what was there before. SharePoint also keeps each file's version history. |
 | **Edit lock** | One person edits a client at a time; others can view it read only. The lock frees itself after 15 minutes if a PC goes away, and someone can take it over. |
-| **Move a client off Xero** | Give the app the client's Xero chart export and its year-end trial balances. It builds the client so that every year's closing balances match Xero. |
+| **Move a client off Xero** | **Connect to Xero** signs in to Xero from the app and brings a client's chart and year-end trial balances straight across (read only), then disconnects it. Or give the app the client's Xero chart export and trial balance exports. Either way, every year's closing balances match Xero. |
+| **Office sign-in** | Optional: everyone signs in with their Fortis Microsoft 365 email. The change log and the edit lock then show the verified email instead of a typed name. |
+| **Desktop icons** | The installed app puts a *Fortis Ledger* icon on the desktop the first time it runs. Settings can add a second icon, *Fortis Ledger - Connect to Xero*, that opens straight at Connect to Xero. |
 
 ## Setting up the SharePoint library (once, for the firm)
 
@@ -36,12 +38,39 @@ changes the skill. The two are separate from now on: a change to one does not re
 
 Library permissions control who can see and change the ledger.
 
+## Signing in with the office email (optional, once, for the firm)
+
+This needs a Microsoft 365 admin and takes about 10 minutes. There is no password or client secret to look after.
+
+1. Go to **entra.microsoft.com** > Applications > App registrations > **New registration**.
+2. Name it `Fortis Ledger`. For supported account types choose **Accounts in this organizational directory only**.
+3. Under Redirect URI choose the platform **Public client/native (mobile & desktop)** and enter `http://localhost`.
+   Then click Register. Microsoft accepts any port on `http://localhost` for desktop apps, which is what the app uses.
+4. Optional: to allow only some staff, go to Enterprise applications > Fortis Ledger > Properties and set
+   **Assignment required** to Yes. Then add those people under Users and groups.
+5. In Fortis Ledger, open **Firm settings** (the menu under your name, top right). Paste the
+   **Directory (tenant) ID** and the **Application (client) ID** from the app's Overview page, add the email
+   domain (`fortisap.com.au`), and click **Test sign-in**.
+6. Once the test sign-in works, tick **Require sign-in on every PC** and click **Save**. The app lets you require
+   sign-in only after a successful test with the same IDs, so a typing mistake cannot lock everyone out.
+
+From then on the app opens at a *Sign in with Microsoft* page. Its button opens the browser, where it is usually
+one click because Microsoft remembers the account. The app checks that the account is in the firm's directory and
+in an allowed domain. Then the change log, the edit lock and the Overview show that email. No password or token is
+saved on the PC, only the last email used, so it can be offered next time. Each time the app opens, it signs in
+again. **Firm settings > Stop requiring sign-in** turns it off again for everyone.
+
 ## Running it
 
 Download **Fortis-Ledger-windows** from the latest run of the *Fortis Ledger* workflow (GitHub >
 Actions). Unzip the `Fortis Ledger` folder anywhere, e.g. `C:\Program Files\Fortis Ledger` or your
 own Apps folder, then run `Fortis Ledger.exe`. It opens in its own window, which uses the Edge
 WebView2 runtime that comes with Windows 10 and 11.
+
+The first time it runs on a PC, it puts a **Fortis Ledger** icon on the desktop, including a desktop that
+OneDrive has moved. **Settings > Desktop icons** adds the icon again if it was deleted, or adds a
+**Fortis Ledger - Connect to Xero** icon. If you move the app's folder, make the icons again from Settings.
+To open the app at a particular screen, use `"Fortis Ledger.exe" --start xero` or `--start settings`.
 
 To check a copy end to end, run `"Fortis Ledger.exe" --self-test`. The exit code is 0 when it
 passes, and the details are written to `%APPDATA%\Fortis Ledger\self-test.txt`.
@@ -58,6 +87,40 @@ python -m fortis_ledger --browser  # in the default web browser
 To build the Windows app yourself, run `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1`.
 
 ## Moving a client off Xero
+
+Do this before the client's Xero subscription is cancelled. There are two ways.
+
+### Connect to Xero (no export files)
+
+Once, for the firm (5 minutes, free):
+
+1. Sign in at **developer.xero.com** > My Apps > **New app**.
+2. App name `Fortis Ledger`. Integration type **Mobile or desktop app** (it has no client secret).
+   Company URL `https://fortisap.com.au`.
+3. Redirect URI `http://localhost:8749/callback`. Create the app.
+4. Copy the app's **Client id** into Fortis Ledger's **Firm settings > Xero connection** and click Save. If another
+   program on the PCs already uses port 8749, choose another port there, and change the redirect URI to match.
+
+For each client:
+
+1. Click **Connect to Xero** (in the sidebar, on the Clients page, or on the desktop icon). The browser opens Xero's
+   sign-in. Sign in with your own Xero login, tick the client's organisation, and click Allow.
+2. The app lists the organisations you connected. Click **Bring across**, check the client's name, type, ABN
+   and signatories, and tick the year ends to bring in. The last two are ticked to start with.
+3. The app reads the organisation's details, its chart of accounts with Xero's report codes, and the trial
+   balance at each year end you ticked. It then builds the client so that each year's closing balances match
+   Xero. Years with no balances in Xero are skipped. If something fails part way, the half-made client is
+   archived rather than left in the list.
+4. The organisation is disconnected from the firm's Xero app afterwards (untick *Disconnect* to keep it). That
+   keeps the firm inside the 5 organisations Xero's free tier allows at a time. Disconnecting changes nothing in
+   the Xero file.
+
+The app only asks Xero for `accounting.settings.read` and `accounting.reports.trialbalance.read`, plus the
+user's name and email. It never writes to Xero. The sign-in lasts 30 minutes and is kept in memory, never on
+disk. Individual transactions don't come across, because Xero offers its Journals API only on its paid
+Advanced tier. Keep the General Ledger Detail and Journal Report exports (step 3 below) in the client's folder.
+
+### Xero export files
 
 Before cancelling a client's Xero subscription, export:
 
@@ -113,12 +176,22 @@ The plan is to add the asset register next.
 
 ## For developers
 
-- `fortis_ledger/`: `store.py` (folder storage, change log, edit lock), `ledger.py` (journal rules,
-  balances, year-end close), `imports.py`, `xero.py` (migration), `reports.py`, `web/` (the screens:
+- `fortis_ledger/`: `store.py` (folder storage, change log, edit lock, firm settings), `ledger.py` (journal
+  rules, balances, year-end close), `imports.py`, `xero.py` (migration), `reports.py`, `web/` (the screens:
   Flask, served on 127.0.0.1 with a start-up token and CSRF checks) and `desktop.py` (pywebview window).
+- Sign-ins: `oauth.py` is the shared part: OAuth 2.0 authorisation code with PKCE, returning to a one-off listener
+  on localhost (RFC 8252). It uses no client secret, and tokens stay in memory. `msauth.py` is office sign-in
+  (Microsoft Entra ID; it checks the tenant, the audience, the nonce and the email domain). `xero_connect.py`
+  is Connect to Xero (Organisation, Accounts and Reports/TrialBalance, read only). `shortcut.py` makes the
+  desktop icons with Windows' own shortcut maker.
+- Firm-wide settings (the office sign-in IDs, the Xero client id) are kept in `fortis-ledger.json` in the
+  data folder, so every PC uses the same ones. They are IDs, not secrets.
 - Tests: `python -m pip install -r requirements-dev.txt && python -m pytest -q tests`.
   `tests/test_ui_browser.py` drives the screens in Chromium when Playwright is installed.
+  `tests/fake_oauth.py` stands in for Xero and Microsoft on 127.0.0.1: like the real services, it checks the
+  PKCE challenge, the client ID and the redirect URI. That way both sign-ins are tested end to end without
+  touching either service.
 - The report engine is `fortis_ledger/reportengine` (scripts, charts, report map, wording, fonts); see its
   `SOURCE.md`. To try another copy of the engine, set `FORTIS_REPORT_ENGINE` to its folder.
 - `xero.migrate_from_api()` builds a client from Xero API JSON (Organisation, Accounts,
-  Reports/TrialBalance) for files that are still connected.
+  Reports/TrialBalance). Connect to Xero uses it.

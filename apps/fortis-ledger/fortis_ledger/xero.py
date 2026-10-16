@@ -168,8 +168,8 @@ def _new_client(store: FolderStore, fields: dict, chart_csv: Path) -> Ledger:
 
 
 def migrate_from_api(store: FolderStore, org_json: dict, accounts_json: dict, tbs: dict[int, dict],
-                     work_dir: str | Path) -> tuple[Client, list[dict]]:
-    fields = client_fields_from_org(org_json)
+                     work_dir: str | Path, overrides: dict | None = None) -> tuple[Client, list[dict]]:
+    fields = {**client_fields_from_org(org_json), **{k: v for k, v in (overrides or {}).items() if v not in (None, "")}}
     chart_csv = write_chart_csv(chart_rows_from_api(accounts_json), Path(work_dir) / "xero-chart.csv")
     L = _new_client(store, fields, chart_csv)
 

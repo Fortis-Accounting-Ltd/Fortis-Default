@@ -21,9 +21,12 @@ import webbrowser
 from werkzeug.serving import make_server
 
 from . import APP_NAME, __version__
+from . import shortcut
 from .settings import Settings, config_dir
 from .store import FolderStore
 from .web import create_app
+
+START_PAGES = {"clients": "/", "xero": "/xero", "settings": "/setup"}
 
 IDLE_LIMIT_SECONDS = 15 * 60     # browser mode: stop when no page has been open for this long
 
@@ -56,6 +59,23 @@ def setup_logging():
     return d / "fortis-ledger.log"
 
 
+def first_run_icon(settings: Settings) -> None:
+    """The installed app puts its icon on the desktop the first time it runs on a PC (once only)."""
+    if not (getattr(sys, "frozen", False) and shortcut.available()) or "app" in settings.icons_made:
+        return
+    try:
+        path = shortcut.create("app")
+    except shortcut.ShortcutError:
+        logging.exception("could not put the desktop icon")
+        return
+    settings.icons_made.append("app")
+    try:
+        settings.save()
+    except OSError:
+        pass
+    logging.info("desktop icon made: %s", path)
+
+
 def say(text: str) -> None:
     if sys.stdout:            # a windowed (no console) build has no stdout
         print(text, flush=True)
@@ -67,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--port", type=int, default=0, help="port on 127.0.0.1 (default: any free port)")
     ap.add_argument("--no-open", action="store_true", help="start the server and print its address only")
     ap.add_argument("--data", help="data folder for this session (overrides the saved setting)")
+    ap.add_argument("--start", choices=sorted(START_PAGES), default="clients", help="screen to open first")
     ap.add_argument("--self-test", action="store_true", help="check this copy end to end and exit (0 = ok)")
     ap.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
     args = ap.parse_args(argv)
@@ -81,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     token = secrets.token_urlsafe(24)
     app = create_app(settings, token=token)
     server = make_server("127.0.0.1", args.port, app, threaded=True)
-    url = f"http://127.0.0.1:{server.server_port}/?token={token}"
+    url = f"http://127.0.0.1:{server.server_port}{START_PAGES[args.start]}?token={token}"
     threading.Thread(target=server.serve_forever, name="fortis-ledger-server", daemon=True).start()
     logging.info("%s %s listening on 127.0.0.1:%s (log %s)", APP_NAME, __version__, server.server_port, log_path)
 
@@ -96,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         app.config["OPEN_CLIENTS"].clear()
 
     atexit.register(release_locks)
+    first_run_icon(settings)
 
     if not args.browser and not args.no_open:
         try:

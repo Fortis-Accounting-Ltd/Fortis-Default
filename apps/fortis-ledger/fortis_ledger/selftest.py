@@ -1,12 +1,14 @@
 """
 End-to-end check of an installed copy - `Fortis Ledger.exe --self-test`.  For each entity type it
 sets up a client in a temporary folder, posts a journal, rolls the year forward and produces the
-Financial Reports and a Trial Balance.  Exit code 0 means everything worked; the details go to
-self-test.txt in the settings folder (a windowed build has no console).
+Financial Reports and a Trial Balance.  Then it opens the main screens, so a template or icon missing
+from the package shows up here.  Exit code 0 means everything worked; the details go to self-test.txt
+in the settings folder (a windowed build has no console).
 """
 from __future__ import annotations
 
 import datetime as dt
+import os
 import tempfile
 import traceback
 from pathlib import Path
@@ -55,6 +57,13 @@ def run() -> int:
             except Exception:
                 ok = False
                 out.append(f"{etype}: FAILED\n{traceback.format_exc()}")
+        try:
+            bad = _screens(Path(d))
+            ok &= not bad
+            out.append("screens: " + (f"FAILED - {', '.join(bad)}" if bad else "ok"))
+        except Exception:
+            ok = False
+            out.append(f"screens: FAILED\n{traceback.format_exc()}")
     out.append("PASSED" if ok else "FAILED")
     text = "\n".join(out)
     try:
@@ -67,3 +76,33 @@ def run() -> int:
     if sys.stdout:
         print(text, flush=True)
     return 0 if ok else 1
+
+
+def _screens(d: Path) -> list[str]:
+    """Open the main screens on the self-test clients; returns the ones that did not show."""
+    from .settings import Settings
+    from .store import FolderStore
+    from .web import create_app
+
+    home = os.environ.get("FORTIS_LEDGER_HOME")
+    os.environ["FORTIS_LEDGER_HOME"] = str(d / "settings")      # keep this PC's own settings untouched
+    try:
+        library = d / "library"
+        slug = FolderStore(library, user="self-test", machine="self-test").list_clients()[0].slug
+        app = create_app(Settings(data_folder=str(library), user_name="self-test"), token="self-test",
+                         work_dir=d / "work")
+        c = app.test_client()
+        c.get("/?token=self-test")
+        bad = []
+        for path in ("/", f"/c/{slug}/", f"/c/{slug}/trial-balance", f"/c/{slug}/journals/new", f"/c/{slug}/reports",
+                     f"/c/{slug}/year-end", "/xero", "/firm", "/setup",
+                     "/signin?again=1", "/static/app.css", "/static/fortis-logo.svg"):
+            r = c.get(path)
+            if r.status_code != 200 or (path.startswith("/c/") and b'id="i-home"' not in r.data):
+                bad.append(f"{path} ({r.status_code})")
+        return bad
+    finally:
+        if home is None:
+            os.environ.pop("FORTIS_LEDGER_HOME", None)
+        else:
+            os.environ["FORTIS_LEDGER_HOME"] = home

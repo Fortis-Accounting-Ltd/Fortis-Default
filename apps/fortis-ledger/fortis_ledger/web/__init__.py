@@ -20,7 +20,9 @@ from flask import Flask, abort, redirect, render_template, request, session
 
 from .. import APP_NAME, __version__
 from ..money import fmt
+from ..msauth import AUTHORITY
 from ..settings import Settings
+from ..xero_connect import Endpoints
 
 ENTITY_LABELS = {"company": "Company", "trust": "Trust", "partnership": "Partnership", "sole_trader": "Sole trader"}
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -43,6 +45,11 @@ def create_app(settings: Settings | None = None, token: str | None = None,
         SHUTDOWN=None,           # set by the launcher in browser mode
         DESKTOP=False,           # True inside the pywebview window
         LAST_SEEN=time.time(),   # last request from an open page (browser mode stops when idle)
+        SIGNINS={},              # browser sign-ins in progress (Microsoft 365, Xero) - memory only
+        MS_AUTHORITY=AUTHORITY,
+        XERO_ENDPOINTS=Endpoints(),
+        BROWSER=None,            # opens a URL in the PC's browser (webbrowser.open unless set)
+        SHORTCUT=None,           # makes a desktop icon (shortcut.create unless set)
     )
     app.config["WORK_DIR"].mkdir(parents=True, exist_ok=True)
 

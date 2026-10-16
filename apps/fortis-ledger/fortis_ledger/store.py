@@ -135,6 +135,21 @@ class FolderStore:
             write_json(self.root / MARKER, {"app": "Fortis Ledger", "format": FORMAT, "created": now_iso(),
                                             "created_by": self.user, "version": __version__})
 
+    # ---- firm-wide settings (in the marker file, so every PC shares them) ------------------- #
+    def firm_settings(self) -> dict:
+        return read_json(self.root / MARKER, {}, quiet=True) or {}
+
+    def save_firm_settings(self, updates: dict) -> dict:
+        data = self.firm_settings()
+        for k, v in updates.items():
+            if v is None:
+                data.pop(k, None)
+            else:
+                data[k] = v
+        data["updated"] = {"by": self.user, "at": now_iso()}
+        write_json(self.root / MARKER, data)
+        return data
+
     def firm_chart_path(self, etype: str) -> Path:
         fname = chartlib.CHART_FILES[chartlib.canonical_type(etype)]
         p = self.charts_dir / fname
