@@ -3,14 +3,20 @@
 render_pack.py - render a ledger pack (pack.json) into the Fortis "Financial
 Reports" PDF, mimicking the Xero report-template look:
 
-  cover -> contents -> Profit and Loss Statement -> Balance Sheet ->
-  Movements in Equity -> Notes -> Depreciation Schedule -> Directors
-  Declaration -> Compilation Report
+  cover -> contents -> the entity type's reports in order, e.g.
+    company:      P&L -> Balance Sheet -> Movements in Equity -> Notes -> Depreciation -> Directors Declaration -> Compilation
+    trust:        Income Statement -> Balance Sheet -> Trust Income Distribution -> Beneficiary Accounts -> Notes
+                  -> Rental Schedule -> Depreciation -> Trustee Declaration -> Compilation
+    partnership:  P&L -> Rental Schedule -> Partner Accounts -> Balance Sheet -> Notes -> Depreciation
+                  -> Partner Declaration -> Compilation
+    sole trader:  P&L -> Movements in Equity -> Balance Sheet -> Notes -> Depreciation
+  (report-map.json entity_layouts; pack options.report_order overrides)
 
 Usage:
     python render_pack.py pack.json out.pdf [--map report-map.json]
                           [--boilerplate boilerplate.json] [--font-dir DIR]
                           [--order pnl,bs,equity,notes,depreciation,declaration,compilation]
+                          [--draft] [--allow-errors]
 
 Requires: reportlab (pip install reportlab).  Fonts: assets/fonts/SourceSans3-*.ttf
 (falls back to Helvetica if missing).
@@ -18,6 +24,8 @@ Requires: reportlab (pip install reportlab).  Fonts: assets/fonts/SourceSans3-*.
 from __future__ import annotations
 
 import argparse
+import io
+import re
 import sys
 from pathlib import Path
 
@@ -33,7 +41,7 @@ from reportlab.platypus import (BaseDocTemplate, Flowable, Frame, KeepTogether, 
                                 PageBreak, PageTemplate, Paragraph, Spacer, Table, TableStyle)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fr_engine import Pack, fmt, fy_labels, load_boilerplate, load_json, load_map, rnd  # noqa: E402
+from fr_engine import Pack, fmt, fy_labels, load_boilerplate, load_json, load_map  # noqa: E402
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 BLUE = colors.HexColor("#06B3E8")
@@ -86,6 +94,7 @@ class NumberedCanvas(rl_canvas.Canvas):
         self._fr_entity = ""
         self._fr_footer_left = "Financial Reports"
         self._fr_fonts = {}
+        self._fr_draft = False
 
     def showPage(self):
         self._saved_page_states.append(dict(self.__dict__))
@@ -98,8 +107,21 @@ class NumberedCanvas(rl_canvas.Canvas):
             self.__dict__.update(state)
             if not state.get("_fr_nofooter"):
                 self._draw_page_number(total)
+            if self._fr_draft:
+                self._draw_draft()
             rl_canvas.Canvas.showPage(self)
         rl_canvas.Canvas.save(self)
+
+    def _draw_draft(self):
+        """Pale diagonal DRAFT stamp - used until every mapping line has been reviewed."""
+        w, h = self._pagesize
+        self.saveState()
+        self.setFillColor(colors.Color(0.85, 0.1, 0.1, alpha=0.12))
+        self.setFont(self._fr_fonts.get("B", "Helvetica-Bold"), 96)
+        self.translate(w / 2, h / 2)
+        self.rotate(40)
+        self.drawCentredString(0, -30, "DRAFT")
+        self.restoreState()
 
     def _draw_page_number(self, total: int):
         w = self._pagesize[0]
@@ -130,6 +152,21 @@ class Meta(Flowable):
             c._fr_title_page = c.getPageNumber()
         if self.nofooter:
             c._fr_nofooter = True
+
+
+class StartMark(Flowable):
+    """Zero-size flowable that records the page a report starts on (Contents page numbers)."""
+
+    def __init__(self, key: str, sink: dict):
+        super().__init__()
+        self.key, self.sink = key, sink
+        self.width = self.height = 0
+
+    def wrap(self, aw, ah):
+        return 0, 0
+
+    def draw(self):
+        self.sink.setdefault(self.key, self.canv.getPageNumber())
 
 
 def on_page_end(canv: NumberedCanvas, doc):
@@ -175,9 +212,16 @@ class Renderer:
         self.b = boiler
         self.f = fonts
         self.fy = fy_labels(pack.entity)
-        self.order = order or pack.options.get("report_order") or boiler["default_report_order"]
-        self.rt = boiler["report_titles"]
-        R, SB, B, I = fonts["R"], fonts["SB"], fonts["B"], fonts["I"]
+        self.etype = pack.etype
+        self.order = order or pack.reports()
+        self.rt = dict(boiler["report_titles"])
+        self.rt.update((boiler.get("report_titles_by_type") or {}).get(self.etype) or {})
+        self.rt.update(pack.layout.get("titles") or {})
+        self.foot = pack.map.get("footnotes") or {}
+        self.has_compilation = "compilation" in self.order
+        self.page_of: dict[str, int] = {}               # report -> first page, recorded while building
+        self.contents_pages: dict[str, int] | None = None  # page numbers from the first pass
+        R, SB, B = fonts["R"], fonts["SB"], fonts["B"]
         self.s = {
             "title": ParagraphStyle("title", fontName=SB, fontSize=22, leading=26, textColor=BLUE, spaceAfter=4),
             "entity": ParagraphStyle("entity", fontName=SB, fontSize=14, leading=17),
@@ -187,6 +231,8 @@ class Renderer:
             "cover_small": ParagraphStyle("cs", fontName=R, fontSize=8, leading=11, spaceBefore=12),
             "contents_title": ParagraphStyle("cot", fontName=SB, fontSize=22, leading=26, textColor=BLUE, spaceAfter=18),
             "contents_item": ParagraphStyle("coi", fontName=R, fontSize=11, leading=15, spaceAfter=10),
+            "contents_row": ParagraphStyle("cor", fontName=R, fontSize=9.5, leading=12),
+            "contents_page": ParagraphStyle("cop", fontName=B, fontSize=9.5, leading=12),
             "colhead": ParagraphStyle("ch", fontName=SB, fontSize=7, leading=9, alignment=TA_RIGHT),
             "colhead_l": ParagraphStyle("chl", fontName=SB, fontSize=7, leading=9, alignment=TA_LEFT),
             "section": ParagraphStyle("sec", fontName=SB, fontSize=10, leading=12),
@@ -211,10 +257,28 @@ class Renderer:
             "dep_group": ParagraphStyle("dg", fontName=SB, fontSize=9, leading=11),
         }
         self.usable_w = PAGE_W - MARGIN_L - MARGIN_R
+        self.decimals = int(pack.options.get("decimals") or 0)
+        self.one_col = pack.single_column
+
+    def fmt(self, v) -> str:
+        return fmt(v, self.decimals)
 
     # ---- small helpers -------------------------------------------------- #
     def P(self, text, style):
         return Paragraph(text, self.s[style])
+
+    def footnote(self, key: str) -> str:
+        """The statements footnote prints only on the reports the firm's Xero packs put it on."""
+        if key == "notes":
+            return self.foot.get("notes", "") if self.has_compilation else ""
+        if key not in (self.foot.get("statement_reports") or []):
+            return ""
+        return self.foot.get("statements", "") if self.has_compilation else self.foot.get("statements_no_compilation", "")
+
+    def cols(self, bs: bool = False) -> list[str]:
+        if bs:
+            return [self.fy["col_cy"]] if self.one_col else [self.fy["col_cy"], self.fy["col_py"]]
+        return [self.fy["cy"]] if self.one_col else [self.fy["cy"], self.fy["py"]]
 
     def header(self, title: str, period: str | None = None, mark=True) -> list:
         ent = self.p.entity["name"]
@@ -222,41 +286,86 @@ class Renderer:
                 self.P(period or self.fy["period"], "period"), Spacer(1, 2)]
 
     def _num(self, v, bold=False):
-        return Paragraph(fmt(v), self.s["num_b" if bold else "num"])
+        return Paragraph(self.fmt(v), self.s["num_b" if bold else "num"])
+
+    @staticmethod
+    def _keep_together(rows: list[dict]) -> list:
+        """
+        NOSPLIT ranges so a page never starts with an orphaned total or computed line, and a
+        heading is never left at the foot of a page: short blocks (heading .. total, <= 20 rows)
+        stay whole; a long block keeps its heading with the first two lines and its last two
+        lines with the total and any computed line straight after it.  Table row = rows index + 1.
+        """
+        cmds = []
+        n = len(rows)
+        heads = [i for i, r in enumerate(rows) if r["kind"] in ("section", "subsection")]
+        for h in heads:
+            end = h
+            j = h + 1
+            while j < n and rows[j]["kind"] not in ("section", "grand"):
+                if rows[j]["kind"] == "subsection" and rows[h]["kind"] == "subsection":
+                    break
+                end = j
+                j += 1
+            if end - h <= 20:
+                cmds.append(("NOSPLIT", (0, h + 1), (-1, end + 1)))
+            else:
+                cmds.append(("NOSPLIT", (0, h + 1), (-1, min(h + 2, end) + 1)))
+        for i, r in enumerate(rows):
+            if r["kind"] in ("total", "grand"):
+                start = i
+                k = i - 1
+                taken = 0
+                while k >= 0 and taken < 2 and rows[k]["kind"] in ("line", "total", "spacer"):
+                    if rows[k]["kind"] != "spacer":
+                        taken += 1
+                    start = k
+                    k -= 1
+                stop = i
+                if r["kind"] == "total":
+                    m = i + 1
+                    while m < n and rows[m]["kind"] == "spacer":
+                        m += 1
+                    if m < n and rows[m]["kind"] == "grand":
+                        stop = m
+                if stop > start:
+                    cmds.append(("NOSPLIT", (0, start + 1), (-1, stop + 1)))
+        return cmds
 
     def _rows_table(self, rows: list[dict], col_labels: list[str], with_notes=False) -> Table:
         """
-        rows: dicts with kind in {colhead, section, subsection, line, total, grand, spacer}
-        Builds the Xero-style ruled table.
+        rows: dicts with kind in {section, subsection, line, total, grand, spacer}
+        Builds the Xero-style ruled table with one or two amount columns.
         """
+        ncols = len(col_labels)
         num_w = 72
         note_w = 36 if with_notes else 0
         label_w = self.usable_w - 2 * num_w - note_w
         data, style = [], []
-        # header row
         head = [Paragraph("", self.s["colhead_l"])]
         if with_notes:
             head.append(Paragraph("NOTES", self.s["colhead"]))
-        head += [Paragraph(col_labels[0], self.s["colhead"]), Paragraph(col_labels[1], self.s["colhead"])]
+        head += [Paragraph(lab, self.s["colhead"]) for lab in col_labels]
+        if ncols == 1:
+            head.append("")
         data.append(head)
         style += [("LINEBELOW", (0, 0), (-1, 0), 0.6, RULE_DARK), ("BOTTOMPADDING", (0, 0), (-1, 0), 3)]
+        blank = [""] * (len(head))
         for r in rows:
             i = len(data)
             kind = r["kind"]
             if kind == "spacer":
-                data.append(["", "", "", ""] if with_notes else ["", "", ""])
+                data.append(list(blank))
                 style.append(("TOPPADDING", (0, i), (-1, i), 0))
                 style.append(("BOTTOMPADDING", (0, i), (-1, i), r.get("h", 2)))
                 continue
             indent = r.get("indent", 0) * 9
             if kind == "section":
-                lab = self.P(r["label"], "section")
-                nums = ["", ""]
+                lab, nums = self.P(r["label"], "section"), ["", ""]
                 style.append(("LINEBELOW", (0, i), (-1, i), 0.6, RULE_DARK))
                 style.append(("TOPPADDING", (0, i), (-1, i), 4))
             elif kind == "subsection":
-                lab = self.P(r["label"], "subsection")
-                nums = ["", ""]
+                lab, nums = self.P(r["label"], "subsection"), ["", ""]
                 style.append(("LINEBELOW", (0, i), (-1, i), 0.3, RULE_LIGHT))
             elif kind == "line":
                 lab = self.P(r["label"], "line")
@@ -273,6 +382,8 @@ class Renderer:
                 style.append(("TOPPADDING", (0, i), (-1, i), 3))
             else:
                 continue
+            if ncols == 1:
+                nums = [nums[0], ""]
             row = [lab]
             if with_notes:
                 row.append(Paragraph(str(r.get("note", "") or ""), self.s["num"]))
@@ -280,6 +391,7 @@ class Renderer:
             data.append(row)
             style.append(("LEFTPADDING", (0, i), (0, i), 2 + indent))
         widths = [label_w] + ([note_w] if with_notes else []) + [num_w, num_w]
+        style += self._keep_together(rows)
         t = Table(data, colWidths=widths, repeatRows=1)
         base = [("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("TOPPADDING", (0, 0), (-1, -1), 2.2),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 1.8), ("LEFTPADDING", (0, 0), (-1, -1), 2),
@@ -297,14 +409,26 @@ class Renderer:
         out += [self.P(self.fy["period"], "cover_line"), self.P(self.b["firm"]["prepared_by"], "cover_small"), PageBreak()]
         return out
 
+    def _present(self, key: str) -> bool:
+        return {"depreciation": bool(self.p.depn), "rental": bool(self.p.rental), "persons": bool(self.p.persons),
+                "distribution": bool(self.p.distribution)}.get(key, True)
+
     def contents(self) -> list:
-        out = [Meta(nofooter=True, footnote=""), self.P(self.rt["contents"], "contents_title"), Spacer(1, 6)]
-        for key in self.order:
-            if key == "depreciation" and not self.p.depn:
-                continue
-            title = self._report_title(key)
-            out.append(self.P(title, "contents_item"))
-        out.append(PageBreak())
+        nofooter = not self.foot.get("contents_footer", True)
+        out = [Meta(nofooter=nofooter, footnote=""), self.P(self.rt["contents"], "contents_title"), Spacer(1, 6)]
+        keys = [k for k in self.order if self._present(k)]
+        if not self.p.options.get("contents_page_numbers", True):
+            out += [self.P(self._report_title(k), "contents_item") for k in keys]
+            out.append(PageBreak())
+            return out
+        pages = self.contents_pages or {}
+        rows = [[self.P(str(pages.get(k, "")), "contents_page"), self.P(self._report_title(k), "contents_row")]
+                for k in keys]
+        t = Table(rows, colWidths=[10 * mm, None], hAlign="LEFT")
+        t.setStyle(TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                               ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 11),
+                               ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+        out += [t, PageBreak()]
         return out
 
     def _report_title(self, key: str) -> str:
@@ -312,6 +436,12 @@ class Renderer:
             return self.p.depn["title"]
         if key == "declaration":
             return self._declaration_cfg().get("title", self.rt["declaration"])
+        if key == "persons" and self.p.persons:
+            return self.p.persons["title"]
+        if key == "distribution" and self.p.distribution:
+            return self.p.distribution["title"]
+        if key == "rental" and self.p.rental:
+            return self.p.rental["title"]
         return self.rt[key]
 
     # ---- profit and loss ----------------------------------------------- #
@@ -319,6 +449,8 @@ class Renderer:
         rows: list[dict] = []
         for sec in self.p.pnl["sections"]:
             if sec.get("computed"):
+                if not sec.get("show", True):
+                    continue
                 rows.append({"kind": "grand", "label": sec["label"], "cy": sec["cy"], "py": sec["py"]})
                 rows.append({"kind": "spacer"})
                 continue
@@ -329,9 +461,71 @@ class Renderer:
                 rows.append({"kind": "line", "label": l["label"], "cy": l["cy"], "py": l["py"], "indent": 1})
             rows.append({"kind": "total", "label": sec["total_label"], "cy": sec["cy"], "py": sec["py"], "indent": 1})
             rows.append({"kind": "spacer"})
-        out = [Meta(footnote=self.p.map["footers"]["statements"])]
-        out += self.header(self.rt["pnl"])
-        out.append(self._rows_table(rows, [self.fy["cy"], self.fy["py"]]))
+        out = [Meta(footnote=self.footnote("pnl"))]
+        out += self.header(self._report_title("pnl"))
+        out.append(self._rows_table(rows, self.cols()))
+        out.append(PageBreak())
+        return out
+
+    # ---- rental schedule ------------------------------------------------ #
+    def rental(self) -> list:
+        r = self.p.rental
+        if not r:
+            return []
+        rows = [{"kind": "section", "label": "Profit/(Loss)"}, {"kind": "subsection", "label": "Income", "indent": 1}]
+        rows += [{"kind": "line", "label": a["display_name"], "cy": a["cy"], "py": a["py"], "indent": 2} for a in r["income"]]
+        rows.append({"kind": "total", "label": "Total Income", "indent": 2, **r["income_total"]})
+        rows.append({"kind": "spacer", "h": 3})
+        rows.append({"kind": "subsection", "label": "Expenses", "indent": 1})
+        rows += [{"kind": "line", "label": a["display_name"], "cy": a["cy"], "py": a["py"], "indent": 2} for a in r["expenses"]]
+        rows.append({"kind": "total", "label": "Total Expenses", "indent": 2, **r["expenses_total"]})
+        rows.append({"kind": "spacer"})
+        rows.append({"kind": "grand", "label": "Total Profit/(Loss)", **r["net"]})
+        out = [Meta(footnote=self.footnote("rental"))]
+        out += self.header(self._report_title("rental"))
+        out.append(self._rows_table(rows, self.cols()))
+        out.append(PageBreak())
+        return out
+
+    # ---- partner / beneficiary accounts ---------------------------------- #
+    def persons(self) -> list:
+        ps = self.p.persons
+        if not ps:
+            return []
+        rows = [{"kind": "section", "label": ps["title"]}, {"kind": "subsection", "label": ps["summary_title"], "indent": 1}]
+        rows += [{"kind": "line", "label": r["label"], "cy": r["cy"], "py": r["py"], "indent": 2} for r in ps["summary"]]
+        rows.append({"kind": "total", "label": f"Total {ps['summary_title']}", "cy": ps["cy"], "py": ps["py"], "indent": 2})
+        rows.append({"kind": "spacer", "h": 6})
+        rows.append({"kind": "subsection", "label": ps["detail_title"], "indent": 1})
+        for person in ps["persons"]:
+            rows.append({"kind": "subsection", "label": person["heading"], "indent": 2})
+            rows += [{"kind": "line", "label": r["label"], "cy": r["cy"], "py": r["py"], "indent": 3} for r in person["rows"]]
+            rows.append({"kind": "total", "label": f"Total {person['heading']}", "cy": person["cy"], "py": person["py"], "indent": 3})
+            rows.append({"kind": "spacer", "h": 3})
+        rows.append({"kind": "total", "label": f"Total {ps['detail_title']}", "cy": ps["cy"], "py": ps["py"], "indent": 2})
+        out = [Meta(footnote=self.footnote("persons"))]
+        out += self.header(self._report_title("persons"))
+        out.append(self._rows_table(rows, self.cols()))
+        out.append(PageBreak())
+        return out
+
+    # ---- trust income distribution ---------------------------------------- #
+    def distribution(self) -> list:
+        d = self.p.distribution
+        if not d:
+            return []
+        rows = [{"kind": "section", "label": d["heading"]}]
+        for r in d["rows"]:
+            kind = {"heading": "subsection", "computed": "grand"}.get(r["kind"], r["kind"])
+            row = {"kind": kind, "label": r["label"], "indent": r.get("indent", 1 if kind != "grand" else 0)}
+            if kind != "subsection":
+                row.update({"cy": r["cy"], "py": r["py"]})
+            rows.append(row)
+            if kind == "grand":
+                rows.append({"kind": "spacer"})
+        out = [Meta(footnote=self.footnote("distribution"))]
+        out += self.header(self._report_title("distribution"))
+        out.append(self._rows_table(rows, self.cols()))
         out.append(PageBreak())
         return out
 
@@ -344,6 +538,8 @@ class Renderer:
         def side(name):
             s = b[name]
             c = cfg[name]
+            if not (s["current"] or s["non_current"]):
+                return
             rows.append({"kind": "section", "label": c["heading"]})
             for part in ("current", "non_current"):
                 lines = s[part]
@@ -364,11 +560,11 @@ class Renderer:
         rows.append({"kind": "spacer"})
         rows.append({"kind": "section", "label": cfg["equity"]["heading"]})
         for l in b["equity"]["rows"]:
-            rows.append({"kind": "line", "label": l["label"], "cy": l["cy"], "py": l["py"], "indent": 1})
+            rows.append({"kind": "line", "label": l["label"], "note": l.get("note", ""), "cy": l["cy"], "py": l["py"], "indent": 1})
         rows.append({"kind": "total", "label": cfg["equity"]["total"], "cy": b["equity"]["total"]["cy"], "py": b["equity"]["total"]["py"], "indent": 1})
-        out = [Meta(footnote=self.p.map["footers"]["statements"])]
-        out += self.header(self.rt["bs"], self.fy["as_at"])
-        out.append(self._rows_table(rows, [self.fy["col_cy"], self.fy["col_py"]], with_notes=True))
+        out = [Meta(footnote=self.footnote("bs"))]
+        out += self.header(self._report_title("bs"), self.fy["as_at"])
+        out.append(self._rows_table(rows, self.cols(bs=True), with_notes=True))
         out += self.fx_block()
         out.append(PageBreak())
         return out
@@ -387,7 +583,7 @@ class Renderer:
     # ---- movements in equity ------------------------------------------- #
     def equity(self) -> list:
         e = self.p.equity
-        es = self.p.map["equity_statement"]
+        es = self.p.equity_labels
         rows = [{"kind": "section", "label": es["heading"]},
                 {"kind": "line", "label": es["opening"], "cy": e["opening"]["cy"], "py": e["opening"]["py"], "indent": 1},
                 {"kind": "spacer", "h": 3},
@@ -397,24 +593,31 @@ class Renderer:
         rows.append({"kind": "total", "label": es["total_increases"], "cy": e["total_increases"]["cy"], "py": e["total_increases"]["py"], "indent": 2})
         rows.append({"kind": "spacer"})
         rows.append({"kind": "grand", "label": es["total"], "cy": e["total"]["cy"], "py": e["total"]["py"]})
-        out = [Meta(footnote="")]
-        out += self.header(self.rt["equity"])
-        out.append(self._rows_table(rows, [self.fy["cy"], self.fy["py"]]))
+        out = [Meta(footnote=self.footnote("equity"))]
+        out += self.header(self._report_title("equity"))
+        out.append(self._rows_table(rows, self.cols()))
         out.append(PageBreak())
         return out
 
     # ---- notes --------------------------------------------------------- #
+    def _subs(self) -> dict:
+        e = self.p.entity
+        return {"entity": e["name"], "legal_name": e.get("legal_name") or e["name"], "fy_long": self.fy["long"],
+                "proprietor": e.get("proprietor") or ", ".join(e.get("directors") or []) or e["name"],
+                "trustee_ref": e.get("trustee") if (e.get("trustee") and self._trustee_kind() == "corporate") else "the trustee company"}
+
     def notes(self) -> list:
         pol = self.b["policies"]
-        out = [Meta(footnote=self.p.map["footers"]["notes"])]
-        out += self.header(self.rt["notes"])
+        subs = self._subs()
+        out = [Meta(footnote=self.footnote("notes"))]
+        out += self.header(self._report_title("notes"))
         out.append(self.P(pol["heading"], "note_h"))
-        for para in pol["basis"]:
-            out.append(self.P(para, "body"))
+        for para in (pol.get("basis_by_type") or {}).get(self.etype) or pol["basis"]:
+            out.append(self.P(para.format(**subs), "body"))
         letters = "bcdefghijk"
         idx = 0
         out.append(self.P(pol["ppe"]["heading"], "body_h"))
-        out.append(self.P(pol["ppe"]["text"], "body"))
+        out.append(self.P((pol["ppe"].get("text_by_type") or {}).get(self.etype) or pol["ppe"]["text"], "body"))
         idx += 1
         inc_inv = self.p.options.get("include_inventory_policy")
         if inc_inv is None:
@@ -443,7 +646,7 @@ class Renderer:
                     rows.append({"kind": "total", "label": r["label"], "cy": r["cy"], "py": r["py"], "indent": r["indent"]})
                     rows.append({"kind": "spacer", "h": 3})
             rows.append({"kind": "grand", "label": n["total_label"], "cy": n["cy"], "py": n["py"]})
-            t = self._rows_table(rows, [self.fy["cy"], self.fy["py"]])
+            t = self._rows_table(rows, self.cols())
             block = [t, Spacer(1, 12)]
             out.append(KeepTogether(block) if len(rows) <= 22 else t)
             if len(rows) > 22:
@@ -474,9 +677,8 @@ class Renderer:
         cols = self.LAYOUTS[d["layout"]]
         is_land = self.depn_is_landscape()
         page_w = (landscape(A4)[0] if is_land else PAGE_W) - MARGIN_L - MARGIN_R
-        out = [Meta(footnote=self.p.map["footers"]["statements"])]
+        out = [Meta(footnote=self.footnote("depreciation"))]
         out += self.header(d["title"])
-        # fixed widths per column; the NAME column takes the slack
         fixed = {"rate": 34, "method": 40, "purchased": 56, "asset_number": 42, "asset_type": 64,
                  "effective_life": 38, "dep_start": 54}
         num_w = 46 if d["layout"] == "register" else 52
@@ -503,7 +705,7 @@ class Renderer:
                 row = []
                 for key, _, kind in cols:
                     if kind == "n":
-                        row.append(Paragraph(fmt(a.get(key, 0)), self.s["dep_num"]))
+                        row.append(Paragraph(self.fmt(a.get(key, 0)), self.s["dep_num"]))
                     else:
                         row.append(Paragraph(str(a.get(key, "") or ""), self.s["dep_line"]))
                 data.append(row)
@@ -514,7 +716,7 @@ class Renderer:
                 if key == "name":
                     row.append(Paragraph(f"Total {g['name']}", self.s["dep_tot"]))
                 elif kind == "n":
-                    row.append(Paragraph(fmt(g["totals"].get(key, 0)), self.s["dep_num_b"]))
+                    row.append(Paragraph(self.fmt(g["totals"].get(key, 0)), self.s["dep_num_b"]))
                 else:
                     row.append("")
             data.append(row)
@@ -525,7 +727,7 @@ class Renderer:
             if key == "name":
                 row.append(Paragraph("Total", self.s["dep_tot"]))
             elif kind == "n":
-                row.append(Paragraph(fmt(d["totals"].get(key, 0)), self.s["dep_num_b"]))
+                row.append(Paragraph(self.fmt(d["totals"].get(key, 0)), self.s["dep_num_b"]))
             else:
                 row.append("")
         data.append(row)
@@ -542,20 +744,38 @@ class Renderer:
             return False
         return d.get("orientation", "landscape" if d["layout"] in ("register", "standard") else "portrait") == "landscape"
 
-    # ---- directors declaration ----------------------------------------- #
+    # ---- declaration ---------------------------------------------------- #
+    def _trustee_kind(self) -> str:
+        e = self.p.entity
+        kind = (e.get("trustee_type") or "").lower()
+        if kind in ("corporate", "individual"):
+            return kind
+        t = (e.get("trustee") or "")
+        if t and not re.search(r"\b(pty|ltd|limited|company|corporation|inc)\b", t, re.I):
+            return "individual"
+        return "corporate"
+
     def _declaration_cfg(self) -> dict:
-        etype = self.p.entity.get("type", "company")
-        variants = self.b["declaration"].get(etype) or self.b["declaration"]["company"]
+        variants = self.b["declaration"].get(self.etype) or self.b["declaration"]["company"]
+        if self.etype == "trust":
+            variants = variants[self._trustee_kind()]
         n = len(self.p.entity.get("directors") or [])
-        key = "singular" if (n == 1 and "singular" in variants) else "plural"
-        return variants[key]
+        if n == 1 and "singular" in variants:
+            return variants["singular"]
+        return variants.get("plural") or variants.get("singular")
+
+    def _dated(self, label: str) -> list:
+        when = self.p.entity.get("date_signed") or ""
+        dated = Table([[Paragraph(label, self.s["sig_bold"]), Paragraph(when, self.s["sig_name"])]], colWidths=[40, 120], rowHeights=[16])
+        dated.setStyle(TableStyle([("LINEBELOW", (1, 0), (1, 0), 0.6, BLACK), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+                                   ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
+        return [dated]
 
     def declaration(self) -> list:
         cfg = self._declaration_cfg()
-        title = cfg.get("title", self.rt["declaration"])
-        subs = {"fy_long": self.fy["long"], "entity": self.p.entity["name"]}
+        subs = self._subs()
         out = [Meta(footnote="")]
-        out += self.header(title)
+        out += self.header(cfg.get("title", self.rt["declaration"]))
         out.append(self.P(cfg["p1"].format(**subs), "body"))
         out.append(self.P(cfg["p2"].format(**subs), "body"))
         items = [[Paragraph(f"{i}.", self.s["body"]), Paragraph(txt.format(**subs), self.s["body"])]
@@ -563,33 +783,30 @@ class Renderer:
         t = Table(items, colWidths=[22, self.usable_w - 22])
         t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
-        out += [t, Spacer(1, 6), self.P(cfg["p3"].format(**subs), "body"), Spacer(1, 22)]
+        out += [t, Spacer(1, 6)]
+        if cfg.get("p3"):
+            out.append(self.P(cfg["p3"].format(**subs), "body"))
+        out.append(Spacer(1, 22))
         for name in self.p.entity.get("directors") or []:
             sig = Table([[Paragraph(cfg["signature_label"], self.s["sig_label"]), ""],
                          ["", Paragraph(name, self.s["sig_name"])]],
-                        colWidths=[40, 170], rowHeights=[16, 14])
+                        colWidths=[48, 170], rowHeights=[16, 14])
             sig.setStyle(TableStyle([("LINEBELOW", (1, 0), (1, 0), 0.6, BLACK), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
                                      ("LEFTPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
             out += [sig, Spacer(1, 22)]
-        dated = Table([[Paragraph(cfg["dated_label"], self.s["sig_bold"]), ""]], colWidths=[40, 120], rowHeights=[16])
-        dated.setStyle(TableStyle([("LINEBELOW", (1, 0), (1, 0), 0.6, BLACK), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
-                                   ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
-        out += [dated, PageBreak()]
+        out += self._dated(cfg["dated_label"])
+        out.append(PageBreak())
         return out
 
     # ---- compilation report -------------------------------------------- #
     def compilation(self) -> list:
         c = self.b["compilation"]
+        words = c.get("words") or {}
         n = len(self.p.entity.get("directors") or [])
-        etype = self.p.entity.get("type", "company")
-        if etype == "trust":
-            dw, dwc, are = "trustee", "Trustee", "is"
-        elif n == 1:
-            dw, dwc, are = "director", "Director", "is"
-        else:
-            dw, dwc, are = "directors", "Directors", "are"
-        subs = {"entity": self.p.entity["name"], "fy_long": self.fy["long"], "director_word": dw,
-                "director_word_cap": dwc, "are_is": are}
+        key = self.etype if self.etype in words else ("company_singular" if n == 1 else "company_plural")
+        legal = self.p.entity.get("legal_name") or self.p.entity["name"]
+        w = {k: v.format(entity=legal) for k, v in (words.get(key) or {}).items()}
+        subs = {"entity": legal, "fy_long": self.fy["long"], **w}
         out = [Meta(footnote="")]
         out += self.header(self.rt["compilation"])
         out.append(self.P(c["title_line"].format(**subs), "body"))
@@ -604,33 +821,31 @@ class Renderer:
         out.append(self.P(c["p6"].format(**subs), "body"))
         out.append(Spacer(1, 40))
         firm = self.b["firm"]
-        out.append(self.P(firm["signatory"], "body"))
+        out.append(self.P(self.p.entity.get("compiled_by") or firm["signatory"], "body"))
         out.append(Spacer(1, 6))
         out.append(self.P(firm["name"], "sig_name"))
         out.append(self.P(firm["descriptor"], "sig_name"))
         for line in firm["address_lines"]:
             out.append(self.P(line, "sig_name"))
         out.append(Spacer(1, 18))
-        dated = Table([[Paragraph(c["dated_label"], self.s["sig_bold"]), ""]], colWidths=[40, 120], rowHeights=[16])
-        dated.setStyle(TableStyle([("LINEBELOW", (1, 0), (1, 0), 0.6, BLACK), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
-                                   ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
-        out.append(dated)
+        out += self._dated(c["dated_label"])
         return out
 
     # ---- assemble ------------------------------------------------------ #
     def story(self) -> list:
         story = self.cover() + self.contents()
         builders = {"pnl": self.pnl, "bs": self.bs, "equity": self.equity, "notes": self.notes,
-                    "depreciation": self.depreciation, "declaration": self.declaration, "compilation": self.compilation}
+                    "depreciation": self.depreciation, "declaration": self.declaration, "compilation": self.compilation,
+                    "rental": self.rental, "persons": self.persons, "distribution": self.distribution}
         for key in self.order:
-            if key == "depreciation":
-                if not self.p.depn:
-                    continue
-                if self.depn_is_landscape():
-                    # the template switch must sit before the page break that starts the schedule
-                    while story and isinstance(story[-1], PageBreak):
-                        story.pop()
-                    story += [NextPageTemplate("landscape"), PageBreak()]
+            if key not in builders or not self._present(key):
+                continue
+            if key == "depreciation" and self.depn_is_landscape():
+                # the template switch must sit before the page break that starts the schedule
+                while story and isinstance(story[-1], PageBreak):
+                    story.pop()
+                story += [NextPageTemplate("landscape"), PageBreak()]
+            story.append(StartMark(key, self.page_of))
             story += builders[key]()
         # drop a trailing PageBreak so we don't emit a blank last page
         while story and isinstance(story[-1], PageBreak):
@@ -638,9 +853,18 @@ class Renderer:
         return story
 
 
-def build_pdf(pack: Pack, out_path: str | Path, boiler: dict, fonts: dict, order=None):
+def build_pdf(pack: Pack, out_path: str | Path, boiler: dict, fonts: dict, order=None, draft: bool = False):
+    # pass 1 (in memory) finds the page each report starts on; pass 2 prints them on the Contents page
+    first = Renderer(pack, boiler, fonts, order)
+    _build(first, io.BytesIO(), pack, boiler, fonts, draft)
     r = Renderer(pack, boiler, fonts, order)
-    doc = BaseDocTemplate(str(out_path), pagesize=A4, leftMargin=MARGIN_L, rightMargin=MARGIN_R,
+    r.contents_pages = dict(first.page_of)
+    _build(r, str(out_path), pack, boiler, fonts, draft)
+    return out_path
+
+
+def _build(r: "Renderer", target, pack: Pack, boiler: dict, fonts: dict, draft: bool):
+    doc = BaseDocTemplate(target, pagesize=A4, leftMargin=MARGIN_L, rightMargin=MARGIN_R,
                           topMargin=MARGIN_T, bottomMargin=MARGIN_B,
                           title=f"{boiler['firm']['pack_title']} - {pack.entity['name']}",
                           author=boiler["firm"]["name"])
@@ -657,10 +881,10 @@ def build_pdf(pack: Pack, out_path: str | Path, boiler: dict, fonts: dict, order
         c._fr_entity = pack.entity["name"]
         c._fr_footer_left = boiler["firm"]["footer_left"]
         c._fr_fonts = fonts
+        c._fr_draft = draft
         return c
 
     doc.build(r.story(), canvasmaker=canvasmaker)
-    return out_path
 
 
 def main():
@@ -671,7 +895,8 @@ def main():
     ap.add_argument("--boilerplate")
     ap.add_argument("--font-dir")
     ap.add_argument("--order", help="comma-separated report keys")
-    ap.add_argument("--allow-errors", action="store_true", help="render even if validation has errors")
+    ap.add_argument("--allow-errors", action="store_true", help="render even if validation has errors (stamped DRAFT)")
+    ap.add_argument("--draft", action="store_true", help="stamp every page DRAFT")
     args = ap.parse_args()
 
     data = load_json(args.pack)
@@ -690,7 +915,7 @@ def main():
         sys.exit(2)
     fonts = register_fonts(Path(args.font_dir) if args.font_dir else None)
     order = args.order.split(",") if args.order else None
-    build_pdf(pack, args.out, boiler, fonts, order)
+    build_pdf(pack, args.out, boiler, fonts, order, draft=args.draft or (args.allow_errors and pack.has_errors()))
     print(f"\nWrote {args.out}")
 
 

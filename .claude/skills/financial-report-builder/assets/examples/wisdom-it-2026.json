@@ -10,7 +10,8 @@
   "options": {
     "sort": "source",
     "include_inventory_policy": true,
-    "depreciation_layout": "simple"
+    "depreciation_layout": "simple",
+    "ppe_note_lines": "accounts"
   },
   "equity": {"opening_py": 85089},
   "accounts": [

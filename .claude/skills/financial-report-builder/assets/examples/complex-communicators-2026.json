@@ -12,7 +12,8 @@
  "options": {
   "sort": "alpha",
   "cost_of_sales_label": "Cost of Sales",
-  "include_inventory_policy": true
+  "include_inventory_policy": true,
+  "ppe_note_lines": "accounts"
  },
  "equity": {
   "opening_py": 0

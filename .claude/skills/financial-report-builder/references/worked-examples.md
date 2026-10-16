@@ -168,5 +168,45 @@ for f in assets/examples/*.json; do python3 scripts/render_pack.py "$f" "/tmp/$(
 ```
 
 Expected: no ERROR rows; Frontier shows the WARNING for the (125,000) retained
-earnings movement; page counts 11 / 9 / 10 / 13 / 14 (the generator's tables run
-slightly longer than Xero's).
+earnings movement; page counts Wisdom 11 / Capstone 9 / Complex 10 /
+Frontier 14 / Padel 13 (the generator's tables run slightly longer than Xero's).
+
+The fixtures pin the presentation their source packs used, so that later
+changes to the entity defaults cannot move them:
+
+| Fixture | Pinned options |
+|---|---|
+| all five | `ppe_note_lines: "accounts"` (PPE note lines by account name, as these packs print them) |
+| Capstone | `cost_of_sales_label: "Cost of Goods Sold"`, `show_current_heading: false` |
+| Complex | `cost_of_sales_label: "Cost of Sales"`, `include_inventory_policy: true` |
+| Frontier | `report_order` (Equity before BS), `notes_order` (Provisions before Payables), register depreciation |
+| Padel | `cost_of_sales_label: "Cost of Goods Sold"`, `fx_rates`, standard depreciation |
+| Wisdom | `sort: "source"`, `include_inventory_policy: true`, simple depreciation |
+
+Changes accepted when the entity-type work landed (all match the Xero packs):
+
+* Capstone COGS prints Opening stock → Purchases → Closing stock.
+* Frontier current liabilities print in the Xero-observed line order.
+* The Contents page carries the footer and page numbers.
+* The P&L no longer carries the statements footnote.
+* Single-director compilation reports read "the director who is responsible".
+
+To compare engine output between two versions of the skill, dump every printed
+figure with a small script over `fr_engine.Pack` (P&L sections, BS lines, notes,
+equity, validation) and diff the dumps. The PDFs themselves differ in metadata.
+
+## Real workpapers (FYI, FY2025-26)
+
+`make_report.py` was run on these FYI workpapers. Use them as end-to-end
+regression targets: same lines posted, no REVIEW, same totals.
+
+| Client (type) | Workpaper source | Lines posted | Result | Notes |
+|---|---|---|---|---|
+| Isaac Houghton Design & Construct Pty Ltd (company) | 2026 Workpapers, P&L / BS tabs | 95, 0 REVIEW | NPAT 139,661 (PY 705); Net Assets 298,030 (PY 163,762); 12 pages | Div 7A loans → non-current Receivables (INFO); ATO RBA and SGC → Taxation; paid parental leave → Personnel-related items; PAYG W/I → Personnel-related items (IHDC's own pack: Taxation - see entity-types § 7 #1). Xero printed COGS as one "Purchases" line: `--cos-lines grouped` |
+| Gersbach Family Trust (trust) | 2026 Workpapers | 19, 0 REVIEW | Profit Before Distribution 180,947; distributed in full; 10 pages | Beneficiary Accounts (2 beneficiaries, numbered by name; codes 46010 / 46020 matched by code). PY balance sheet in the workpaper does not balance → ERROR, as it should (Xero PY differs: the 740,000 shares were still held) |
+| Premier Fire NZ Trust (trust) | 2025 Workpapers | 49, 0 REVIEW | Profit Before Distribution 122,490 = distribution | PY column of the workpaper is inconsistent (FX gain sign; PY Net Profit excludes Other Income) → ERROR; use the 2024 pack for comparatives. "Loan - G Stalley" → Payables (trust rule) |
+| Chawla Family Trust (trust) | 2026 Workpapers | 14, 0 REVIEW | Loss (324) (PY (3,413)); Net Assets (158,734) | Mistyped "Opearting Profit" subtotal skipped; withholding tax → Receivables; matches the Xero pack line for line apart from deliberate wording |
+| Hassarati Family Trust (trust) | 2026 Workpapers | 13, 0 REVIEW | Loss (2,697); first year | Single-column layout |
+| True Talkers Speech Therapy (sole trader) | 2025 ITR Workpaper, Business tab (A-C / F-H) | 21, 0 REVIEW | Net Profit 27,745; Net Assets 27,745; 6 pages | Matches the FY2025 Xero pack line for line (GST 261 and owner account 19,062 under Receivables) |
+| True Talkers Speech Therapy (sole trader) | 2026 ITR Workpaper, Business tab (A-D / K-N) | 34, 0 REVIEW | Net Profit 138,778; Net Assets 166,523 | Tax adjustments below Net Profit ignored; owner account 148,930 under Receivables |
+| B Liu & X Wang (partnership) | test workpaper built from the 2026 Xero pack (no Fortis partnership workpaper has a BS) | 30, 0 REVIEW | Loss (268,588.72) distributed; Owner/Partner Accounts 361,398.51 | Partner Accounts statement identical to Xero; cents; "Loans from LBQ" print under Financial Liabilities (Xero: Payables › Non Current - set the code per client) |
