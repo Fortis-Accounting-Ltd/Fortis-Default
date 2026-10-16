@@ -1,8 +1,8 @@
 """
 Reports.
 
-* Financial Reports pack - the firm's Xero report template look, produced by the
-  financial-report-builder engine from the ledger's balances (current and prior year).
+* Financial Reports pack - the firm's Xero report template look, produced by the report
+  engine (fortis_ledger/reportengine) from the ledger's balances (current and prior year).
 * Trial Balance, General Ledger (account transactions) and Journal Report - Xero-style tables,
   as PDF or Excel.
 """

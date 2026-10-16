@@ -1,0 +1,386 @@
+*Code,Report Code,*Name,Reporting Name,*Type,*Tax Code,Description,Dashboard,Expense Claims,Enable Payments
+497B,EXP.FOR.RGL,Bank Revaluations,,Bank Revaluations,BAS Excluded,Bank account revaluations due for foreign exchange rate changes,No,No,No
+498U,EXP.FOR.UGL,Unrealised Currency Gains,,Unrealised Currency Gains,BAS Excluded,Unrealised currency gains on outstanding items,No,No,No
+499R,EXP.FOR.RGL,Realised Currency Gains,,Realised Currency Gains,BAS Excluded,Gains or losses made due to currency exchange rate changes,No,No,No
+610,ASS.CUR.REC.TRA,Accounts Receivable (DO NOT USE),,Accounts Receivable,BAS Excluded,Outstanding invoices the company has issued out to the client but has not yet received in cash at balance date.,No,No,No
+800,LIA.CUR.PAY.TRA,Accounts Payable (DO NOT USE),,Accounts Payable,BAS Excluded,Outstanding invoices the company has received from suppliers but has not yet paid at balance date,No,No,No
+801,LIA.CUR.PAY.EMP,Unpaid Expense Claims (DO NOT USE),,Unpaid Expense Claims,BAS Excluded,Expense claims typically made by employees/shareholder employees still outstanding.,No,No,No
+860,LIA.CUR,Historical Adjustment (DO NOT USE),,Historical,BAS Excluded,For accountant adjustments,No,No,No
+865,LIA.CUR,Rounding (DO NOT USE),,Rounding,BAS Excluded,An adjustment entry to allow for rounding,No,No,No
+877,LIA.CUR,Tracking Transfers (DO NOT USE),,Tracking,BAS Excluded,Transfers between tracking categories,No,No,No
+10100,ASS.CUR,Suspense,,Current Asset,BAS Excluded,,No,No,No
+11000,ASS.CUR.INY,Inventory,,Current Asset,BAS Excluded,,No,No,No
+11100,ASS.CUR.INY,Resale items,,Current Asset,BAS Excluded,,No,No,No
+11200,ASS.CUR.INY,Finished goods,,Current Asset,BAS Excluded,,No,No,No
+11300,ASS.CUR.INY,Raw materials,,Current Asset,BAS Excluded,,No,No,No
+11400,ASS.CUR.INY,Primo inventory,,Current Asset,BAS Excluded,,No,No,No
+12100,ASS.CUR.INY.WIP,Work in progress,,Current Asset,BAS Excluded,,No,No,No
+13020,ASS.CUR.REL,Payments made - loans to related parties (Clearing),,Current Asset,BAS Excluded,,No,No,No
+13030,ASS.CUR.REL,Proceeds from repayments - loans to related parties (Clrg),,Current Asset,BAS Excluded,,No,No,No
+13100,ASS.CUR.REC,Bills receivable,,Current Asset,BAS Excluded,,No,No,No
+13200,ASS.CUR.TER,Term debtors,,Current Asset,BAS Excluded,,No,No,No
+13300,ASS.CUR.REC.ADA,Provision for unearned revenue,,Current Asset,BAS Excluded,,No,No,No
+13400,ASS.CUR.TER,Short term deposits,,Current Asset,BAS Excluded,,No,No,No
+13500,ASS.CUR.REC.TRA,Sundry debtors,,Current Asset,BAS Excluded,,No,No,No
+13600,ASS.CUR.REC.TRA,Trade debtors,,Current Asset,BAS Excluded,,No,No,No
+13700,ASS.CUR.REC.ADA,Less provision for doubtful debts,,Current Asset,BAS Excluded,,No,No,No
+13800,ASS.CUR.REC,Leases,,Current Asset,BAS Excluded,,No,No,No
+13900,ASS.CUR.LOA,Loans - Related party,,Current Asset,BAS Excluded,,No,No,No
+13910,ASS.CUR.LOA,Loans - Other,,Current Asset,BAS Excluded,,No,No,No
+13911,ASS.CUR.LOA,Loans - Associates,,Current Asset,BAS Excluded,,No,No,No
+14100,ASS.NCA.INV.SHA,Government securities,,Fixed Asset,BAS Excluded,,No,No,No
+14110,ASS.NCA.INV.SHA,Change in market value of Government securities,,Fixed Asset,BAS Excluded,,No,No,No
+14200,ASS.NCA.INV.SHA,Shares in associated companies,,Fixed Asset,BAS Excluded,,No,No,No
+14210,ASS.NCA.INV.SHA,Change in market value of Shares in associated companies,,Fixed Asset,BAS Excluded,,No,No,No
+14300,ASS.NCA.INV.SHA,Shares in listed companies,,Fixed Asset,BAS Excluded,,No,No,No
+14310,ASS.NCA.INV.SHA,Change in market value of Shares in listed companies,,Fixed Asset,BAS Excluded,,No,No,No
+14400,ASS.NCA.INV.SHA,Shares in unlisted companies,,Fixed Asset,BAS Excluded,,No,No,No
+14410,ASS.NCA.INV.SHA,Change in market value of Shares in unlisted companies,,Fixed Asset,BAS Excluded,,No,No,No
+14500,ASS.NCA.INV.SHA,Managed investments,,Fixed Asset,BAS Excluded,,No,No,No
+14510,ASS.NCA.INV.SHA,Change in market value of Managed investments,,Fixed Asset,BAS Excluded,,No,No,No
+14520,ASS.NCA.INV.SHA,Tax deferred distributions from Managed investments,,Fixed Asset,BAS Excluded,,No,No,No
+18100,ASS.CUR.CAS,Cash on hand,,Current Asset,BAS Excluded,,No,No,No
+18300,ASS.CUR.CAS,Petty cash,,Current Asset,BAS Excluded,,No,No,No
+18400,ASS.CUR.CAS.BAN,Bank currencies,,Current Asset,BAS Excluded,,No,No,No
+18500,ASS.CUR.CAS.BAN,Cheque account,,Current Asset,BAS Excluded,,No,No,No
+18501,ASS.CUR.CAS.BAN,Cheque account 1,,Current Asset,BAS Excluded,,No,No,No
+18600,ASS.CUR.CAS.BAN,Payroll account,,Current Asset,BAS Excluded,,No,No,No
+18700,ASS.CUR.TER,Term deposits,,Current Asset,BAS Excluded,,No,No,No
+19100,ASS.NCA.FIX.PLA,"Purchase of property, plant & equipment (Clearing)",,Fixed Asset,BAS Excluded,,No,No,No
+19110,ASS.NCA.INV,Purchase of investment (Clearing),,Fixed Asset,BAS Excluded,,No,No,No
+19200,ASS.CUR.REC.PRE,Prepayments,,Fixed Asset,BAS Excluded,,No,No,No
+19300,ASS.NCA.INV.TER,Deposit paid,,Fixed Asset,BAS Excluded,,No,No,No
+21100,ASS.NCA.FIX.LAC,Freehold land at cost,,Fixed Asset,GST on Expenses,,No,No,No
+21110,ASS.NCA.FIX.LAC,Less accumulated amortisation - Freehold land,,Fixed Asset,BAS Excluded,,No,No,No
+21200,ASS.NCA.FIX.LAC,Leasehold land at cost,,Fixed Asset,GST on Expenses,,No,No,No
+21210,ASS.NCA.FIX.LAC,Less accumulated amortisation leasehold land,,Fixed Asset,BAS Excluded,,No,No,No
+21300,ASS.NCA.FIX.BUC,Property investments at cost,,Fixed Asset,GST on Expenses,,No,No,No
+21310,ASS.NCA.FIX.BUC.ACC,Less accumulated depreciation property investments,,Fixed Asset,BAS Excluded,,No,No,No
+21400,ASS.NCA.FIX.BUC,Buildings at cost,,Fixed Asset,GST on Expenses,,No,No,No
+21410,ASS.NCA.FIX.BUC.ACC,Less accumulated depreciation building,,Fixed Asset,BAS Excluded,,No,No,No
+21500,ASS.NCA.FIX.VEH,Motor vehicles at cost,,Fixed Asset,GST on Expenses,,No,No,No
+21510,ASS.NCA.FIX.VEH.ACC,Less accumulated depreciation motor vehicles,,Fixed Asset,BAS Excluded,,No,No,No
+21600,ASS.NCA.FIX.BUC,Staff amenities at cost,,Fixed Asset,GST on Expenses,,No,No,No
+21610,ASS.NCA.FIX.BUC,Less accumulated depreciation staff amenities,,Fixed Asset,BAS Excluded,,No,No,No
+21700,ASS.NCA.FIX.PLA,Plant and equipment at cost,,Fixed Asset,GST on Expenses,,No,No,No
+21710,ASS.NCA.FIX.PLA.ACC,Less accumulated depreciation plant and equipment,,Fixed Asset,BAS Excluded,,No,No,No
+21800,ASS.NCA.FIX.PLA,Office equipment at cost,,Fixed Asset,GST on Expenses,,No,No,No
+21810,ASS.NCA.FIX.PLA.ACC,Less accumulated depreciation office equipment,,Fixed Asset,BAS Excluded,,No,No,No
+21900,ASS.NCA.FIX.PLA,Furniture and fittings at cost,,Fixed Asset,GST on Expenses,,No,No,No
+21910,ASS.NCA.FIX.PLA.ACC,Less accumulated depreciation furniture & fitting,,Fixed Asset,BAS Excluded,,No,No,No
+22100,ASS.NCA.FIX.LEA,Leasehold improvements at cost,,Fixed Asset,GST on Expenses,,No,No,No
+22110,ASS.NCA.FIX.LEA.ACC,Less accumulated amortisation leasehold improvements,,Fixed Asset,BAS Excluded,,No,No,No
+22200,ASS.NCA.FIX.BUC,Property improvements at cost,,Fixed Asset,GST on Expenses,,No,No,No
+22210,ASS.NCA.FIX.BUC.ACC,Less accumulated amortisation property improvement,,Fixed Asset,BAS Excluded,,No,No,No
+22300,ASS.NCA.FIX.BUC,Low value pool,,Fixed Asset,GST on Expenses,,No,No,No
+22310,ASS.NCA.FIX.BUC.ACC,Less accumulated depreciation Low value pool,,Fixed Asset,BAS Excluded,,No,No,No
+22400,ASS.NCA.FIX.BUC,SB general pool,,Fixed Asset,GST on Expenses,,No,No,No
+22410,ASS.NCA.FIX.BUC.ACC,Less accumulated depreciation SB general pool,,Fixed Asset,BAS Excluded,,No,No,No
+22500,ASS.NCA.FIX.BUC,SB long life pool,,Fixed Asset,GST on Expenses,,No,No,No
+22510,ASS.NCA.FIX.BUC.ACC,Less accumulated depreciation SB long life pool,,Fixed Asset,BAS Excluded,,No,No,No
+22600,ASS.NCA.FIX.BUC,Project pool,,Fixed Asset,GST on Expenses,,No,No,No
+22610,ASS.NCA.FIX.BUC.ACC,Less accumulated depreciation Project pool,,Fixed Asset,BAS Excluded,,No,No,No
+24990,ASS.NCA.FIX,Tangible Assets,,Fixed Asset,BAS Excluded,,No,No,No
+25100,ASS.NCA.INT,Formation cost,,Fixed Asset,GST on Expenses,,No,No,No
+25110,ASS.NCA.INT,Less accumulated amortisation formation,,Fixed Asset,BAS Excluded,,No,No,No
+25200,ASS.NCA.INT.GOO,Goodwill,,Fixed Asset,GST on Expenses,,No,No,No
+25210,ASS.NCA.INT.GOO.IMP,Less accumulated amortisation Goodwill,,Fixed Asset,BAS Excluded,,No,No,No
+25300,ASS.NCA.INT,Patents and trademarks,,Fixed Asset,GST on Expenses,,No,No,No
+25301,ASS.NCA.INT,Initial franchise costs,,Fixed Asset,GST on Expenses,,No,No,No
+25310,ASS.NCA.INT,Less accumulated amortisation Patent & trademarks,,Fixed Asset,BAS Excluded,,No,No,No
+25400,ASS.NCA.INT,Research and development expenditure,,Fixed Asset,GST on Expenses,,No,No,No
+25410,ASS.NCA.INT,Less accumulated amortisation R&D,,Fixed Asset,BAS Excluded,,No,No,No
+25500,ASS.NCA.INT,Exploration expenditure - Phases,,Fixed Asset,GST on Expenses,,No,No,No
+25510,ASS.NCA.INT,Less accumulated amortisation Exploration,,Fixed Asset,BAS Excluded,,No,No,No
+25600,ASS.NCA.INT,Debenture issue expenses,,Fixed Asset,GST on Expenses,,No,No,No
+25610,ASS.NCA.INT,Less accumulated amortisation Debenture,,Fixed Asset,BAS Excluded,,No,No,No
+31100,LIA.CUR.PAY.TRA,Vendors - Domestic,,Current Liability,BAS Excluded,,No,No,No
+31200,LIA.CUR.PAY.TRA,Vendors - Foreign,,Current Liability,BAS Excluded,,No,No,No
+31300,LIA.CUR.PAY.TRA,Trade creditors,,Current Liability,BAS Excluded,,No,No,No
+31400,LIA.CUR.PAY.TRA,Other creditors - ATO,,Current Liability,BAS Excluded,,No,No,No
+31500,LIA.CUR.PAY.TRA,Sundry creditors,,Current Liability,BAS Excluded,,No,No,No
+31600,LIA.CUR.PAY.TRA,Loans from shareholder,,Current Liability,BAS Excluded,,No,No,No
+31603,LIA.CUR.PAY.TRA,Loan from director,,Current Liability,BAS Excluded,,No,No,No
+32100,LIA.CUR.LOA,Loans - Bank,,Current Liability,BAS Excluded,,No,No,No
+32110,LIA.CUR.LOA,Loans - Secured,,Current Liability,BAS Excluded,,No,No,No
+32120,LIA.CUR.LOA,Loans - Unsecured,,Current Liability,BAS Excluded,,No,No,No
+32130,LIA.CUR.LOA,Loans - Related parties,,Current Liability,BAS Excluded,,No,No,No
+32200,LIA.CUR.LOA,Lease,,Current Liability,BAS Excluded,,No,No,No
+32300,LIA.CUR.HPA,Hire purchases liability,,Current Liability,BAS Excluded,,No,No,No
+32310,LIA.CUR.HPA.UEI,Less unexpired hp liability,,Current Liability,BAS Excluded,,No,No,No
+32400,LIA.CUR.LOA,Bills payable,,Current Liability,BAS Excluded,,No,No,No
+32500,LIA.CUR.LOA,Visa,,Current Liability,BAS Excluded,,No,No,No
+32600,LIA.CUR.LOA,Master card,,Current Liability,BAS Excluded,,No,No,No
+32700,LIA.CUR.LOA,Bank card,,Current Liability,BAS Excluded,,No,No,No
+32800,LIA.CUR.LOA,Diners card,,Current Liability,BAS Excluded,,No,No,No
+33000,LIA.CUR.PRO,Provisions,,Current Liability,BAS Excluded,,No,No,No
+33100,LIA.CUR.PRO,Provision for dividends,,Current Liability,BAS Excluded,,No,No,No
+33200,LIA.CUR.PAY.EMP,Provision for holiday pay,,Current Liability,BAS Excluded,,No,No,No
+33300,LIA.CUR.PRO,Provision for income tax,,Current Liability,BAS Excluded,,No,No,No
+33400,LIA.CUR.PAY.EMP,Provision for long service leave,,Current Liability,BAS Excluded,,No,No,No
+33500,LIA.CUR.PAY.EMP,Provision for sick leave,,Current Liability,BAS Excluded,,No,No,No
+33600,LIA.CUR.PAY.EMP,Employee entitlements,,Current Liability,BAS Excluded,,No,No,No
+34100,LIA.CUR.TAX.INC.WTP,Withholding taxes payable,,Current Liability,BAS Excluded,,No,No,No
+34200,LIA.CUR.TAX.INC.WTP,Supplementary taxes payable,,Current Liability,BAS Excluded,,No,No,No
+34300,LIA.CUR.PAY.PAY,PAYG withholding payable,,Current Liability,BAS Excluded,,No,No,No
+34400,LIA.CUR.PAY.PAY,Wages payable,,Current Liability,BAS Excluded,,No,No,No
+34500,LIA.CUR.PAY.PAY,Vacation compensation payable,,Current Liability,BAS Excluded,,No,No,No
+34600,LIA.CUR.PAY.EMP,Superannuation payable,,Current Liability,BAS Excluded,,No,No,No
+34700,LIA.CUR.PAY.EMP,Superannuation contribution surcharge,,Current Liability,BAS Excluded,,No,No,No
+34800,LIA.CUR.PAY.EMP,Directors fees payable,,Current Liability,BAS Excluded,,No,No,No
+35010,LIA.CUR.TAX.GST,GST payments / refunds,,GST,BAS Excluded,,No,No,No
+35100,LIA.CUR.TAX.GST,GST collected,,Current Liability,BAS Excluded,,No,No,No
+35300,LIA.CUR.TAX.INC,Income tax payable,,Current Liability,BAS Excluded,,No,No,No
+35400,LIA.CUR.TAX.INC,Import duty payable,,Current Liability,BAS Excluded,,No,No,No
+35500,LIA.CUR.PAY.PAY,Instalment taxes payable,,Current Liability,BAS Excluded,,No,No,No
+35510,LIA.CUR.PAY.PAY,PAYG instalment payable,,Current Liability,BAS Excluded,,No,No,No
+35520,LIA.CUR.PAY.PAY,Voluntary instalments payable,,Current Liability,BAS Excluded,,No,No,No
+35610,LIA.CUR.TAX.INC.WTP,No ABN withholding payable,,Current Liability,BAS Excluded,,No,No,No
+35620,LIA.CUR.TAX.INC.WTP,No TFN withholding payable,,Current Liability,BAS Excluded,,No,No,No
+35640,LIA.CUR.PAY.PAY,Voluntary withholdings payable,,Current Liability,BAS Excluded,,No,No,No
+35700,LIA.CUR.TAX,Wine equalisation tax payable,,Current Liability,BAS Excluded,,No,No,No
+35800,LIA.CUR.TAX,Luxury car tax payable,,Current Liability,BAS Excluded,,No,No,No
+35900,LIA.CUR.TAX,Corporate taxes payable,,Current Liability,BAS Excluded,,No,No,No
+36100,LIA.CUR.TAX,Dividends for the fiscal year,,Current Liability,BAS Excluded,,No,No,No
+36300,LIA.CUR.PAY.TRA,Accrued charges,,Current Liability,BAS Excluded,,No,No,No
+36400,LIA.CUR.PAY.TRA,Income in advance,,Current Liability,BAS Excluded,,No,No,No
+36500,LIA.CUR.PAY.TRA,Revolving credit,,Current Liability,BAS Excluded,,No,No,No
+37020,LIA.NCL,Proceeds from borrowings (Clearing),,Non-current Liability,BAS Excluded,,No,No,No
+37030,LIA.NCL,Repayment of borrowings (Clearing),,Non-current Liability,BAS Excluded,,No,No,No
+37100,LIA.NCL.LOA.DIR,Shareholders loans,,Non-current Liability,BAS Excluded,,No,No,No
+37300,LIA.NCL.HPA,Hire purchase liability,,Non-current Liability,BAS Excluded,,No,No,No
+37400,LIA.NCL.HPA.UEI,Less unexpired hire purchase liability,,Non-current Liability,BAS Excluded,,No,No,No
+37500,LIA.NCL.LOA,Lease liability,,Non-current Liability,BAS Excluded,,No,No,No
+37600,LIA.NCL.LOA,Interest Bearing Loans - Bank,,Non-current Liability,BAS Excluded,,No,No,No
+37610,LIA.NCL.LOA.SEC,Interest Bearing Loans - Secured,,Non-current Liability,BAS Excluded,,No,No,No
+37620,LIA.NCL.LOA.UNS,Interest Bearing Loans - Unsecured,,Non-current Liability,BAS Excluded,,No,No,No
+37630,LIA.NCL.REL,Interest Bearing Loans - related parties,,Non-current Liability,BAS Excluded,,No,No,No
+37640,LIA.NCL.LOA.SET,Loans - Beneficiary,,Non-current Liability,BAS Excluded,,No,No,No
+37700,LIA.NCL.LOA,Debentures,,Non-current Liability,BAS Excluded,,No,No,No
+37800,LIA.NCL.CHM,Mortgage,,Non-current Liability,BAS Excluded,,No,No,No
+38100,LIA.NCL.UDL.1,Aggregate employee entitlement liability,,Non-current Liability,BAS Excluded,,No,No,No
+38200,LIA.NCL.UDL.1,Provision for deferred exchange gain,,Non-current Liability,BAS Excluded,,No,No,No
+38300,LIA.NCL.UDL.1,Provisions for deferred tax liability,,Non-current Liability,BAS Excluded,,No,No,No
+38400,LIA.NCL.UDL.1,Provision for long term service leave,,Non-current Liability,BAS Excluded,,No,No,No
+41000,EQU,Shareholder's Equity,,Equity,BAS Excluded,,No,No,No
+41100,EQU.RES.REV,Asset revaluation reserve,,Equity,BAS Excluded,,No,No,No
+41200,EQU.RES,Capital redemption reserve,,Equity,BAS Excluded,,No,No,No
+41300,EQU.RES,General reserve,,Equity,BAS Excluded,,No,No,No
+41400,EQU.RES.LRR,Livestock revaluation reserve,,Equity,BAS Excluded,,No,No,No
+41500,EQU.RES.REV,Stock revaluation reserve,,Equity,BAS Excluded,,No,No,No
+41600,EQU.RES,Forfeited shares reserve,,Equity,BAS Excluded,,No,No,No
+41700,EQU.RES,Investment fluctuation reserve,,Equity,BAS Excluded,,No,No,No
+41800,EQU.RES,Share premium reserve,,Equity,BAS Excluded,,No,No,No
+41900,EQU.RES,Trading stock revaluation reserve,,Equity,BAS Excluded,,No,No,No
+42000,EQU.RET.CUR,Net income for the year,,Equity,BAS Excluded,,No,No,No
+43000,EQU.RET,Retained Earnings,,Retained Earnings,BAS Excluded,,No,No,No
+44100,EQU.SHA,Shareholder's capital,,Equity,BAS Excluded,,No,No,No
+44200,EQU.DRA,Shareholder's drawings,,Equity,BAS Excluded,,No,No,No
+44300,EQU.SHA,Issued capital,,Equity,BAS Excluded,,No,No,No
+44400,EQU.ADV,Deferred taxes,,Equity,BAS Excluded,,No,No,No
+44500,EQU.SHA,Share capital,,Equity,BAS Excluded,,No,No,No
+51100,REV,Sale of retail,,Revenue,GST on Income,,No,No,No
+51200,REV.TRA.GOO,"sale adjustments, retail",,Revenue,GST on Income,,No,No,No
+57100,REV.TRA.SER,sale - Job name,,Revenue,GST on Income,,No,No,No
+58100,REV.OTH,Fees and charges collected,,Other Income,GST on Income,,No,No,No
+58110,REV.OTH,Patient and royalty fees collected,,Other Income,GST on Income,,No,No,No
+58120,REV.OTH,Management fees collected,,Other Income,GST on Income,,No,No,No
+58130,REV.OTH,Consulting fees collected,,Other Income,GST on Income,,No,No,No
+58140,REV.OTH,Professional fees collected,,Other Income,GST on Income,,No,No,No
+58150,REV.OTH,Commissions collected,,Other Income,GST on Income,,No,No,No
+58160,REV.OTH,Patient fees,,Other Income,GST on Income,,No,No,No
+58170,REV.OTH,Accounting fees collected,,Other Income,GST on Income,,No,No,No
+58180,REV.OTH,Expenses reimbursed,,Other Income,GST on Income,,No,No,No
+58200,REV.OTH,Discounts granted,,Other Income,GST on Income,,No,No,No
+58300,REV.OTH,Administration fees,,Other Income,GST on Income,,No,No,No
+58500,REV.OTH,Freight income,,Other Income,GST on Income,,No,No,No
+58600,REV.GRA.GOV,Government subsidies,,Other Income,GST on Income,,No,No,No
+58700,REV.OTH,Insurance proceeds,,Other Income,GST on Income,,No,No,No
+58800,REV.INV.REN,Rental income,,Other Income,GST on Income,,No,No,No
+58900,REV.OTH,Miscellaneous income,,Other Income,GST on Income,,No,No,No
+58910,REV.OTH,FB employee contribution,,Other Income,GST on Income,,No,No,No
+61100,EXP.COS,Purchase - Retail,,Direct Costs,GST on Expenses,,No,No,No
+61110,EXP.COS,Discount received - Retail,,Direct Costs,GST on Expenses,,No,No,No
+61120,EXP.COS,Delivery expenses - Retail,,Direct Costs,GST on Expenses,,No,No,No
+61130,EXP.COS,Job cost - Retail,,Direct Costs,GST on Expenses,,No,No,No
+62100,EXP.COS,Food Inventory purchase,,Direct Costs,BAS Excluded,,No,No,No
+69900,EXP.COS.CLO,Closing inventories,,Direct Costs,BAS Excluded,,No,No,No
+69910,EXP.COS.OPE,Opening inventories,,Direct Costs,BAS Excluded,,No,No,No
+71100,EXP.OPR,Cleaning,,Expense,GST on Expenses,,No,No,No
+71200,EXP.OPR,Electricity,,Expense,GST on Expenses,,No,No,No
+71300,EXP.OPR,Gas and heating,,Expense,GST on Expenses,,No,No,No
+71400,EXP.OPR,Water,,Expense,GST on Expenses,,No,No,No
+71500,EXP.OPR,Repairs and maintenance,,Expense,GST on Expenses,,No,No,No
+71510,EXP.OPR,Office decor,,Expense,GST on Expenses,,No,No,No
+71600,EXP.OPR,Security,,Expense,GST on Expenses,,No,No,No
+71700,EXP.OPR,Insurance,,Expense,GST on Expenses,,No,No,No
+71800,EXP.OPR,Pest control,,Expense,GST on Expenses,,No,No,No
+71900,EXP.OPR,Rates & land tax,,Expense,GST on Expenses,,No,No,No
+72100,EXP.ADM,Office supplies,,Expense,GST on Expenses,,No,No,No
+72200,EXP.ADM,"Telephone, mobile and internet",,Expense,GST on Expenses,,No,No,No
+72300,EXP.ADM,Postage,,Expense,GST on Expenses,,No,No,No
+72500,EXP.ADM,Bank charges,,Expense,GST on Expenses,,No,No,No
+72600,EXP.ADM,Dues and subscriptions,,Expense,GST on Expenses,,No,No,No
+72650,EXP.ADM,Filing fees,,Expense,GST on Expenses,,No,No,No
+72700,EXP.ADM,Computer expenses,,Expense,GST on Expenses,,No,No,No
+72710,EXP.ADM,Internet,,Expense,GST on Expenses,,No,No,No
+72720,EXP.ADM,Printing and stationery,,Expense,GST on Expenses,,No,No,No
+72730,EXP.ADM,"Magazines, journals and periodicals",,Expense,GST on Expenses,,No,No,No
+72740,EXP.ADM,Reference materials,,Expense,GST on Expenses,,No,No,No
+72750,EXP.ADM,Memberships,,Expense,GST on Expenses,,No,No,No
+72800,EXP.ADM,Seminars and workshops,,Expense,GST on Expenses,,No,No,No
+72910,EXP.ADM,Legal services,,Expense,GST on Expenses,,No,No,No
+72920,EXP.ADM,Secretarial services,,Expense,GST on Expenses,,No,No,No
+72930,EXP.ADM,Accounting fees,,Expense,GST on Expenses,,No,No,No
+73100,EXP.OCC,Cleaning - Home office,,Expense,GST on Expenses,,No,No,No
+73200,EXP.OCC,Electricity - Home office,,Expense,GST on Expenses,,No,No,No
+73300,EXP.OCC,Gas and heating - Home office,,Expense,GST on Expenses,,No,No,No
+73400,EXP.OCC,Water - Home office,,Expense,GST on Expenses,,No,No,No
+73500,EXP.OCC,Council rates - Home office,,Expense,GST on Expenses,,No,No,No
+73600,EXP.OCC,Rent - Home office,,Expense,GST on Expenses,,No,No,No
+73700,EXP.OCC,Repairs - Home office,,Expense,GST on Expenses,,No,No,No
+73900,EXP.OCC,Less private use - Home office,,Expense,GST on Expenses,,No,No,No
+74100,EXP.ADV,Advertising,,Expense,GST on Expenses,,No,No,No
+74200,EXP.ENT,Entertainment,,Expense,GST on Expenses,,No,No,No
+74300,EXP.TRA.NAT,Travel - National,,Expense,GST on Expenses,,No,No,No
+74301,EXP.TRA.INT,Travel - International,,Expense,GST Free Expenses,,No,No,No
+74500,EXP.COS,Delivery expenses - Raw material,,Expense,GST on Expenses,,No,No,No
+74600,EXP.COS,Loading/Unloading costs,,Expense,GST on Expenses,,No,No,No
+75100,EXP.VEH,MV - Fuel and motor oil,,Expense,GST on Expenses,,No,No,No
+75200,EXP.VEH,MV - Registration and insurance,,Expense,GST on Expenses,,No,No,No
+75300,EXP.VEH,MV - Repairs and maintenance,,Expense,GST on Expenses,,No,No,No
+75400,EXP.VEH,MV - Tyres and battery,,Expense,GST on Expenses,,No,No,No
+75500,EXP.VEH,MV - Leasing charges,,Expense,GST on Expenses,,No,No,No
+75600,EXP.VEH,MV - Interest,,Expense,GST on Expenses,,No,No,No
+75700,EXP.VEH,MV - Depreciation,,Expense,GST on Expenses,,No,No,No
+75800,EXP.VEH,MV - Other vehicle expenses,,Expense,GST on Expenses,,No,No,No
+75810,EXP.VEH,MV - Parking,,Expense,GST on Expenses,,No,No,No
+75900,EXP.VEH,MV - Less private use,,Expense,GST on Expenses,,No,No,No
+76020,EXP.BAD,Bad debt expenses,,Expense,GST on Expenses,,No,No,No
+76030,EXP.BAD,Debt collection expenses,,Expense,GST on Expenses,,No,No,No
+76040,EXP.UDE,Terms charges,,Expense,GST on Expenses,,No,No,No
+76050,EXP.REN,Rental expenses,,Expense,GST on Expenses,,No,No,No
+76060,EXP.ADM,Petty cash expenses,,Expense,GST on Expenses,,No,No,No
+76070,EXP.OPR,Shrinkage and spoilage,,Expense,GST on Expenses,,No,No,No
+76090,EXP.NON,Fines and penalties,,Expense,GST on Expenses,,No,No,No
+76100,EXP.OPR,License fees,,Expense,GST on Expenses,,No,No,No
+76110,EXP.EMP.SHA,Directors fees,,Expense,GST on Expenses,,No,No,No
+76120,EXP.INT,Merchant fees,,Expense,GST on Expenses,,No,No,No
+76130,EXP.OPR,Facturing fees,,Expense,GST on Expenses,,No,No,No
+76200,EXP.UDE.3,Donation,,Expense,GST on Expenses,,No,No,No
+76210,EXP.OPR,Discounts given,,Expense,GST on Expenses,,No,No,No
+76220,EXP.OCC,Rates and taxes,,Expense,GST on Expenses,,No,No,No
+76225,EXP.OCC,Regulatory compliance costs,,Expense,GST on Expenses,,No,No,No
+76230,EXP.OPR,Commissions paid,,Expense,GST on Expenses,,No,No,No
+76235,EXP.OPR,Franchise fees,,Expense,GST on Expenses,,No,No,No
+76240,EXP.FOR,Foreign exchange gain/loss,,Expense,GST on Expenses,,No,No,No
+76245,EXP.FOR,Consulting fees,,Expense,GST on Expenses,,No,No,No
+76260,EXP.OPR,Waste disposal,,Expense,GST on Expenses,,No,No,No
+76270,EXP.OPR,Agistments,,Expense,GST on Expenses,,No,No,No
+76300,EXP.OPR,Research and development,,Expense,GST on Expenses,,No,No,No
+76400,EXP.OPR,Hire of plant and equipment,,Expense,GST on Expenses,,No,No,No
+76410,EXP.OPR,Hire stall or venue,,Expense,GST on Expenses,,No,No,No
+76420,EXP.OPR,Hire car,,Expense,GST on Expenses,,No,No,No
+76430,EXP.OPR,Hire purchase charges,,Expense,GST on Expenses,,No,No,No
+76450,EXP.OPR,Brokerage,,Expense,GST on Expenses,,No,No,No
+76460,EXP.INS,Insurance - other,,Expense,GST on Expenses,,No,No,No
+76500,EXP.OPR,Borrowing costs,,Expense,GST on Expenses,,No,No,No
+76600,EXP.OPR,Materials / Consumables,,Expense,GST on Expenses,,No,No,No
+76610,EXP.OPR,Tools,,Expense,GST on Expenses,,No,No,No
+76900,EXP.OPR,Sundry expense,,Expense,GST on Expenses,,No,No,No
+77100,EXP.EMP.WAG,Wages - Employees,,Expense,BAS Excluded,,No,No,No
+77101,EXP.EMP.WAG,Wages - Associates,,Expense,BAS Excluded,,No,No,No
+77200,EXP.EMP.WAG,Salaries,,Expense,BAS Excluded,,No,No,No
+77210,EXP.EMP,Vacation compensation,,Expense,BAS Excluded,,No,No,No
+77220,EXP.EMP,Holiday pay,,Expense,BAS Excluded,,No,No,No
+77230,EXP.EMP,Long service leave,,Expense,BAS Excluded,,No,No,No
+77300,EXP.EMP.SUP,Superannuation contributions - Associates,,Expense,BAS Excluded,,No,No,No
+77400,EXP.EMP.SUP,Superannuation contributions - Employees,,Expense,BAS Excluded,,No,No,No
+77500,EXP.EMP.WAG,Payroll taxes,,Expense,BAS Excluded,,No,No,No
+77510,EXP.EMP.WAG,PAYG withholding,,Expense,BAS Excluded,,No,No,No
+77600,EXP.FBT,Fringe benefit tax,,Expense,BAS Excluded,,No,No,No
+77700,EXP.EMP,Workcover,,Expense,GST on Expenses,,No,No,No
+77710,EXP.EMP,Protective clothing,,Expense,GST on Expenses,,No,No,No
+77720,EXP.EMP,Uniforms,,Expense,GST on Expenses,,No,No,No
+77800,EXP.EMP,Contractors and sub-contractors,,Expense,GST on Expenses,,No,No,No
+77810,EXP.EMP,Consultant services,,Expense,GST on Expenses,,No,No,No
+77900,EXP.EMP,Staff training and welfare,,Expense,GST on Expenses,,No,No,No
+77910,EXP.EMP,Professional development,,Expense,GST on Expenses,,No,No,No
+77920,EXP.EMP,Staff amenities,,Expense,GST on Expenses,,No,No,No
+78110,EXP.DEP,Depreciation - Freehold land,,Expense,BAS Excluded,,No,No,No
+78120,EXP.DEP,Depreciation - Leasehold land,,Expense,BAS Excluded,,No,No,No
+78130,EXP.DEP,Depreciation - Property investment,,Expense,BAS Excluded,,No,No,No
+78140,EXP.DEP,Depreciation - Buildings,,Expense,BAS Excluded,,No,No,No
+78150,EXP.DEP,Depreciation - Vehicles,,Expense,BAS Excluded,,No,No,No
+78160,EXP.DEP,Depreciation - Staff amenities,,Expense,BAS Excluded,,No,No,No
+78170,EXP.DEP,Depreciation - Plant and equipment,,Expense,BAS Excluded,,No,No,No
+78180,EXP.DEP,Depreciation - Office equipment,,Expense,BAS Excluded,,No,No,No
+78190,EXP.DEP,Depreciation - Furniture and fittings,,Expense,BAS Excluded,,No,No,No
+78210,EXP.AMO,Amortisation - Leasehold improvements,,Expense,BAS Excluded,,No,No,No
+78220,EXP.AMO,Amortisation - Property improvements,,Expense,BAS Excluded,,No,No,No
+78230,EXP.DEP,Depreciation - Low value pool,,Expense,BAS Excluded,,No,No,No
+78240,EXP.DEP,Depreciation - SB general pool,,Expense,BAS Excluded,,No,No,No
+78250,EXP.DEP,Depreciation - SB long life pool,,Expense,BAS Excluded,,No,No,No
+78260,EXP.DEP,Depreciation - SB low cost assets (immediate write off),,Expense,GST on Expenses,,No,No,No
+79310,EXP.AMO,Amortisation - Formation,,Expense,BAS Excluded,,No,No,No
+79320,EXP.AMO,Amortisation - Goodwill and consolidation,,Expense,BAS Excluded,,No,No,No
+79330,EXP.AMO,Amortisation - Patents and trademarks,,Expense,BAS Excluded,,No,No,No
+79340,EXP.AMO,Amortisation - Research and development,,Expense,BAS Excluded,,No,No,No
+79350,EXP.AMO,Amortisation - Exploration expenditure,,Expense,BAS Excluded,,No,No,No
+79360,EXP.AMO,Amortisation - Debenture issue expenses,,Expense,BAS Excluded,,No,No,No
+79400,EXP.AMO,Deduction for project pool,,Expense,BAS Excluded,,No,No,No
+79410,EXP.DEP,Capital works deductions,,Expense,BAS Excluded,,No,No,No
+79500,EXP.DEP,Adjustment for private use on tangible assets,,Expense,BAS Excluded,,No,No,No
+79600,EXP.DEP,Write-downs to recoverable amounts,,Expense,BAS Excluded,,No,No,No
+79700,REV.OTH.CAP,Net gain/loss on disposal of plant and equipment,,Expense,BAS Excluded,,No,No,No
+79800,REV.OTH.INV,Net gain or (loss) on sale of investments,,Expense,BAS Excluded,,No,No,No
+79810,REV.OTH.INV,Change in net market value of investments,,Expense,BAS Excluded,,No,No,No
+81100,REV.OTH,"Proceeds from sale of property, plant & equipment (Clearing)",,Other Income,BAS Excluded,,No,No,No
+81110,REV.OTH,Proceeds from sale of investments (Clearing),,Other Income,BAS Excluded,,No,No,No
+81200,REV.INV.DIV,Dividends received,,Other Income,BAS Excluded,,No,No,No
+81300,REV.OTH,Fringe benefit employee contributions,,Other Income,GST on Income,,No,No,No
+81400,REV.OTH,Finance charges from customers,,Other Income,GST on Income,,No,No,No
+81500,REV.INV.INT,Interest received,,Other Income,GST Free Income,,No,No,No
+81501,REV.INV.INT,Interest received- ATO,,Other Income,GST Free Income,,No,No,No
+81600,REV.OTH,Payment discounts received,,Other Income,GST on Income,,No,No,No
+81700,REV.OTH,Invoice rounding,,Other Income,BAS Excluded,,No,No,No
+81710,REV.OTH,Application rounding,,Other Income,BAS Excluded,,No,No,No
+81800,EXP.FOR.RGL,Realised gains,,Other Income,BAS Excluded,,No,No,No
+81810,EXP.FOR.UGL,Unrealised gains,,Other Income,BAS Excluded,,No,No,No
+81900,REV.OTH,Extraordinary income,,Other Income,BAS Excluded,,No,No,No
+85010,REV.INV.REN,Rental income - Property name,,Other Income,BAS Excluded,,No,No,No
+85110,REV.INV.REN,Other rental income,,Other Income,BAS Excluded,,No,No,No
+91100,EXP.INT,Interest on revolving credit,,Expense,GST Free Expenses,,No,No,No
+91200,EXP.INT,Interest on bank loans,,Expense,GST Free Expenses,,No,No,No
+91201,EXP.INT,Interest - ATO,,Expense,GST Free Expenses,,No,No,No
+91202,EXP.INT,Interest on car loan,,Expense,GST Free Expenses,,No,No,No
+91300,EXP.INT,Mortgage interest,,Expense,GST Free Expenses,,No,No,No
+91400,EXP.UDE.3,Finance charges to vendors,,Expense,GST on Expenses,,No,No,No
+91500,EXP.UDE.3,Payment discounts granted,,Expense,GST Free Expenses,,No,No,No
+91600,EXP.FOR.UGL,Unrealised losses,,Expense,BAS Excluded,,No,No,No
+91700,EXP.FOR.RGL,Realised losses,,Expense,BAS Excluded,,No,No,No
+91800,EXP.UDE.3,Extraordinary expenses,,Expense,BAS Excluded,,No,No,No
+95010,EXP.INV.REN,Advertising - Rental,,Expense,GST on Expenses,,No,No,No
+95110,EXP.INV.REN,Bank charges - Rental,,Expense,GST Free Expenses,,No,No,No
+95210,EXP.INV.REN,Body corporate fees - Rental,,Expense,GST on Expenses,,No,No,No
+95310,EXP.INV.REN,Borrowing costs - Rental,,Expense,GST Free Expenses,,No,No,No
+95410,EXP.INV.REN,Cleaning - Rental,,Expense,GST on Expenses,,No,No,No
+95510,EXP.INV.REN,Council rates - Rental,,Expense,GST Free Expenses,,No,No,No
+95610,EXP.INV.REN,Depreciation - Rental,,Expense,GST Free Expenses,,No,No,No
+95710,EXP.INV.REN,Garden maintenance - Rental,,Expense,GST on Expenses,,No,No,No
+95810,EXP.INV.REN,Insurance - Rental,,Expense,GST on Expenses,,No,No,No
+95910,EXP.INV.REN,Interest on loans - Rental,,Expense,GST Free Expenses,,No,No,No
+96010,EXP.INV.REN,Land tax - Rental,,Expense,GST Free Expenses,,No,No,No
+96110,EXP.INV.REN,Legal fees - Rental,,Expense,GST on Expenses,,No,No,No
+96210,EXP.INV.REN,Pest control - Rental,,Expense,GST on Expenses,,No,No,No
+96310,EXP.INV.REN,Property agent fees & commissions - Rental,,Expense,GST on Expenses,,No,No,No
+96410,EXP.INV.REN,Repairs & maintenance - Rental,,Expense,GST on Expenses,,No,No,No
+96510,EXP.INV.REN,Capital work deductions - Rental,,Expense,GST Free Expenses,,No,No,No
+96610,EXP.INV.REN,"Stationery, phone & postage - Rental",,Expense,GST on Expenses,,No,No,No
+96710,EXP.INV.REN,Travel expenses - Rental,,Expense,GST on Expenses,,No,No,No
+96810,EXP.INV.REN,Water supply - Rental,,Expense,GST Free Expenses,,No,No,No
+96910,EXP.INV.REN,Sundry expenses - Rental,,Expense,GST on Expenses,,No,No,No
+99100,EXP.INC,Income tax,,Expense,BAS Excluded,,No,No,No
+99300,EXP.NON,Non deductable expenses,,Expense,BAS Excluded,,No,No,No
+99500,EQU.RET.DIV.ORD,Fully franked dividends paid,,Equity,BAS Excluded,,No,No,No
+99600,EQU.RET.DIV.ORD,Unfranked dividends paid,,Equity,BAS Excluded,,No,No,No

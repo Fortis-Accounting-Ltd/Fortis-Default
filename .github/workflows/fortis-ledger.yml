@@ -4,12 +4,10 @@ on:
   push:
     paths:
       - "apps/fortis-ledger/**"
-      - ".claude/skills/financial-report-builder/**"
       - ".github/workflows/fortis-ledger.yml"
   pull_request:
     paths:
       - "apps/fortis-ledger/**"
-      - ".claude/skills/financial-report-builder/**"
       - ".github/workflows/fortis-ledger.yml"
   workflow_dispatch:
 

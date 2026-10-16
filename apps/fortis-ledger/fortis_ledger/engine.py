@@ -1,12 +1,9 @@
 """
-Loads the financial-report-builder skill's engine (chart matcher, report engine, PDF renderer,
-workpaper reader) so the app and the skill share one implementation of the firm's charts,
-report codes and report layouts.
+The report engine - chart matcher, Financial Reports engine, PDF renderer and workpaper reader.
 
-Where the skill lives:
-  * FORTIS_SKILL_DIR, when set;
-  * inside the packaged app (PyInstaller): <bundle>/financial-report-builder;
-  * otherwise the repository copy: <repo>/.claude/skills/financial-report-builder.
+The app carries its own copy in fortis_ledger/reportengine, taken from the financial-report-builder
+skill (see reportengine/SOURCE.md).  The app never reads or changes the skill, and changes to the
+skill do not reach the app.  FORTIS_REPORT_ENGINE points the app at another copy of the engine.
 """
 from __future__ import annotations
 
@@ -15,22 +12,17 @@ import sys
 from pathlib import Path
 
 
-def skill_dir() -> Path:
-    env = os.environ.get("FORTIS_SKILL_DIR")
+def engine_dir() -> Path:
+    env = os.environ.get("FORTIS_REPORT_ENGINE")
     if env:
         return Path(env)
-    if getattr(sys, "frozen", False):
-        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "financial-report-builder"
-    here = Path(__file__).resolve()
-    for parent in here.parents:
-        cand = parent / ".claude" / "skills" / "financial-report-builder"
-        if (cand / "scripts" / "fr_engine.py").exists():
-            return cand
-    raise RuntimeError("Cannot find the financial-report-builder skill - set FORTIS_SKILL_DIR to its folder.")
+    return Path(__file__).resolve().parent / "reportengine"
 
 
-SKILL_DIR = skill_dir()
-_scripts = str(SKILL_DIR / "scripts")
+ENGINE_DIR = engine_dir()
+if not (ENGINE_DIR / "scripts" / "fr_engine.py").exists():
+    raise RuntimeError(f"The report engine is missing from {ENGINE_DIR} - reinstall Fortis Ledger.")
+_scripts = str(ENGINE_DIR / "scripts")
 if _scripts not in sys.path:
     sys.path.insert(0, _scripts)
 
@@ -39,7 +31,7 @@ import chart as chartlib  # noqa: E402
 import fr_engine  # noqa: E402
 import render_pack  # noqa: E402
 
-CHART_DIR = SKILL_DIR / "assets" / "chart-of-accounts"
+CHART_DIR = ENGINE_DIR / "assets" / "chart-of-accounts"
 REPORT_MAP = fr_engine.load_map()
 BOILERPLATE = fr_engine.load_boilerplate()
 
@@ -90,5 +82,5 @@ def report_code_options() -> list[tuple[str, str]]:
     return list(_codes)
 
 
-__all__ = ["SKILL_DIR", "CHART_DIR", "REPORT_MAP", "BOILERPLATE", "build_pack", "chartlib", "fr_engine",
+__all__ = ["ENGINE_DIR", "CHART_DIR", "REPORT_MAP", "BOILERPLATE", "build_pack", "chartlib", "fr_engine",
            "render_pack", "fonts", "slot_of", "nature", "describe", "report_code_options"]

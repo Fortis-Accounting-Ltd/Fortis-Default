@@ -104,7 +104,7 @@
     <label for="options_json">Advanced options</label>
     <div><textarea id="options_json" name="options_json" rows="5" class="mono">{{ form.get('options_json', '{}') }}</textarea>
       <span class="help">Other report-engine options as JSON, e.g. <code>{"note_titles": {"receivables": "Trade and Other Receivables"}}</code>.
-        See the financial-report-builder skill's reference for the full list.</span></div>
+        Leave it as <code>{}</code> unless a client needs one.</span></div>
   </div>
   {% endif %}
   </fieldset>

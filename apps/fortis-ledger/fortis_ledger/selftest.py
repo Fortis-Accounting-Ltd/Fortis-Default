@@ -16,7 +16,7 @@ from . import __version__
 
 def run() -> int:
     from . import reports
-    from .engine import SKILL_DIR, report_code_options
+    from .engine import ENGINE_DIR, report_code_options
     from .ledger import Ledger
     from .model import Journal, Line
     from .money import to_dec
@@ -24,7 +24,7 @@ def run() -> int:
     from .store import FolderStore
 
     out: list[str] = [f"Fortis Ledger {__version__} self-test {dt.datetime.now():%Y-%m-%d %H:%M:%S}",
-                      f"report engine: {SKILL_DIR}", f"report codes known: {len(report_code_options())}"]
+                      f"report engine: {ENGINE_DIR}", f"report codes known: {len(report_code_options())}"]
     ok = True
     with tempfile.TemporaryDirectory(prefix="fortis-ledger-selftest-", ignore_cleanup_errors=True) as d:
         st = FolderStore(Path(d) / "library", user="self-test", machine="self-test")

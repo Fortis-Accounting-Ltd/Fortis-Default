@@ -11,7 +11,7 @@ Imports - CSV / Excel files into the ledger.
   Date / Reference / Narration / Account / Debit / Credit file.
 * Chart of accounts: Xero's chart export (handled by ClientChart.merge).
 * Workpaper: the Fortis year-end workpaper (Profit & Loss / Balance Sheet tabs, or an ITR Business tab),
-  read and classified by the financial-report-builder skill.
+  read and classified by the report engine's workpaper reader.
 
 Every import is planned first (what each line will post to, new accounts, rounding) so the user can
 check it, then applied.

@@ -33,7 +33,7 @@
     {{ m.csrf() }}<input type="hidden" name="kind" value="workpaper">
     <h2>Fortis workpaper</h2>
     <p class="help">The year-end workpaper (Excel) with Profit &amp; Loss and Balance Sheet tabs, or an ITR Business tab. Each line is matched to the
-      client's chart by nature, the same way the financial-report-builder skill does it.</p>
+      client's chart by nature (section, name, then keyword rules).</p>
     <label for="w-file">Workpaper</label><input id="w-file" type="file" name="file" accept=".xlsx,.xlsm" required>
     <div class="form-grid compact">
       <label for="w-fy">Financial year</label><input id="w-fy" name="fy" value="{{ fy }}" class="short" inputmode="numeric">

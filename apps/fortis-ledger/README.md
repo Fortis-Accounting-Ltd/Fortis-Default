@@ -5,9 +5,9 @@ Ledger plan for: a chart of accounts with report codes, manual journals, trial b
 year-end roll-forward, and Xero-style reports. The data lives in a SharePoint document library, so
 the whole firm works from one copy.
 
-The Financial Reports come from the **financial-report-builder** skill's engine
-(`.claude/skills/financial-report-builder`). The firm's charts, report codes, layouts and wording
-live in one place, so the app and the skill always produce the same pack.
+The Financial Reports come from the app's own copy of the report engine (`fortis_ledger/reportengine`),
+taken unchanged from the financial-report-builder skill on 16 October 2026. The app never reads or
+changes the skill. The two are separate from now on: a change to one does not reach the other.
 
 ## What it does
 
@@ -118,7 +118,7 @@ The plan is to add the asset register next.
   Flask, served on 127.0.0.1 with a start-up token and CSRF checks) and `desktop.py` (pywebview window).
 - Tests: `python -m pip install -r requirements-dev.txt && python -m pytest -q tests`.
   `tests/test_ui_browser.py` drives the screens in Chromium when Playwright is installed.
-- The financial-report-builder skill is found at `.claude/skills/financial-report-builder` in the
-  repository. To use another copy, set `FORTIS_SKILL_DIR`. The Windows build bundles the skill.
+- The report engine is `fortis_ledger/reportengine` (scripts, charts, report map, wording, fonts); see its
+  `SOURCE.md`. To try another copy of the engine, set `FORTIS_REPORT_ENGINE` to its folder.
 - `xero.migrate_from_api()` builds a client from Xero API JSON (Organisation, Accounts,
   Reports/TrialBalance) for files that are still connected.
