@@ -440,6 +440,14 @@ def test_migrate_rejects_a_trial_balance_that_is_not_at_a_year_end(web, lib):
     assert not [c for c in store_for(lib).list_clients() if c.name == "Half Year Pty Ltd"]
 
 
+def test_fortis_logo_in_the_header(web):
+    page = web.get("/").get_data(as_text=True)
+    assert 'src="/static/fortis-logo.svg"' in page and 'alt="Fortis Accounting Partners"' in page
+    logo = web.get("/static/fortis-logo.svg")
+    assert logo.status_code == 200 and logo.mimetype == "image/svg+xml"
+    assert b"<script" not in logo.data
+
+
 def test_every_screen_renders(web, company):
     post(web, f"/c/{company}/journals/save", journal_form("30/06/2026", "Fees", ("72930", "100", ""), ("31300", "", "100")))
     for path in ["/", "/setup", "/clients/new", "/migrate", f"/c/{company}/", f"/c/{company}/journals",

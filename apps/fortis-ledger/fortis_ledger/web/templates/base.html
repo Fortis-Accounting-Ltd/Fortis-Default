@@ -10,7 +10,7 @@
 </head>
 <body data-csrf="{{ csrf_token() }}"{% if client and not readonly %} data-heartbeat="{{ url_for('ui.lock_heartbeat', slug=client.slug) }}"{% endif %}{% if browser_mode %} data-alive="{{ url_for('ui.alive') }}"{% endif %}>
 <header class="topbar">
-  <a class="brand" href="{{ url_for('ui.clients') }}"><img src="{{ url_for('static', filename='icon.svg') }}" alt="" class="logo"> Fortis Ledger</a>
+  <a class="brand" href="{{ url_for('ui.clients') }}" title="Fortis Ledger - all clients"><img src="{{ url_for('static', filename='fortis-logo.svg') }}" alt="Fortis Accounting Partners" class="logo"><span class="app-name">Ledger</span></a>
   {% if client %}
     <span class="sep">/</span>
     <a class="client-title" href="{{ url_for('ui.overview', slug=client.slug) }}">{{ client.name }}</a>
