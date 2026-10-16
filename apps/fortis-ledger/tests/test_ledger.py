@@ -148,3 +148,18 @@ def test_interim_period(company):
     pk = L.pack(2026, upto=dt.date(2025, 12, 31))
     assert pk["entity"]["period_label"] == "For the period 1 July 2025 to 31 December 2025"
     assert next(a for a in pk["accounts"] if a["code"] == "51100")["cy"] == 100.0
+
+
+def test_profit_is_before_dividends_like_the_reports(store):
+    c = store.create_client("Div Co Pty Ltd", "company", directors=["A Director"])
+    L = Ledger(store, c.slug)
+    L.chart.add("50600", "Dividend paid", "EXP.DIV", "Expense")       # Xero's P&L-coded dividends
+    L.ensure_year(2026)
+    L.save_journal(J("2026-06-30", "year", ("18500", 8000, 0), ("51100", 0, 10000), ("50600", 2000, 0)), 2026)
+    tb = L.trial_balance(2026)
+    assert tb["profit"] == Decimal("10000.00") and tb["appropriations"] == Decimal("2000.00")
+    assert tb["retained"] == Decimal("8000.00")
+    pk = fr_engine.Pack(L.pack(2026), REPORT_MAP)
+    assert pk.summary()["npat"]["cy"] == 10000
+    L.close_year(2026)
+    assert Ledger(store, c.slug).closing(2027)[L.retained_earnings_code()] == Decimal("-8000.00")

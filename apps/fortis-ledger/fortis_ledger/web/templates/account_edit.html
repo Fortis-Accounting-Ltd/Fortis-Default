@@ -1,0 +1,47 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Account {{ a.code }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ a.code }} {{ a.name }}</h1>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('ui.account_transactions', slug=client.slug, fy=fy, code=a.code) }}">Account transactions</a>
+    <a class="btn link" href="{{ url_for('ui.accounts', slug=client.slug) }}#a-{{ a.code }}">Chart of accounts</a>
+  </div>
+</div>
+<form method="post" class="panel">
+  {{ m.csrf() }}{{ m.fy_field() }}
+  <fieldset{% if readonly %} disabled{% endif %}>
+  <div class="form-grid">
+    <label>Code</label><div class="mono">{{ a.code }}</div>
+    <label for="name">Name</label><input id="name" name="name" value="{{ a.name }}" required>
+    <label for="report_code">Report code</label>
+    <div><input id="report_code" name="report_code" value="{{ a.report_code }}" list="dl-codes" required class="mono">
+      <span class="help">Prints in: <strong>{{ prints_as }}</strong>. A change applies to every year's reports.</span></div>
+    <label for="type">Account type</label>
+    <select id="type" name="type">{% for t in types %}<option{% if a.type == t %} selected{% endif %}>{{ t }}</option>{% endfor %}
+      {% if a.type not in types %}<option selected>{{ a.type }}</option>{% endif %}</select>
+    <label for="reporting_name">Name in reports</label>
+    <div><input id="reporting_name" name="reporting_name" value="{{ a.reporting_name }}" placeholder="Blank = the account name">
+      <span class="help">Xero's "Reporting Name": what the Financial Reports print for this account.</span></div>
+  </div>
+  {{ m.code_datalist(codes) }}
+  </fieldset>
+  {% if not readonly %}<div class="actions"><button class="btn primary">Save</button></div>{% endif %}
+</form>
+
+<h2>Closing balance by year</h2>
+<table class="grid compact narrow">
+  <thead><tr><th>Year</th><th class="num">Balance</th></tr></thead>
+  <tbody>{% for y, b in history|reverse %}<tr><td>FY{{ y }}</td><td class="num">{{ b|money0 }}</td></tr>{% else %}<tr><td colspan="2" class="empty">No years yet.</td></tr>{% endfor %}</tbody>
+</table>
+
+{% if not readonly %}
+{% if used %}
+<p class="help">This account has journals, so it cannot be deleted.</p>
+{% else %}
+<form method="post" class="inline-form" data-confirm="Delete account {{ a.code }} {{ a.name }}?">
+  {{ m.csrf() }}<input type="hidden" name="op" value="delete"><button class="btn danger small">Delete account</button>
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}

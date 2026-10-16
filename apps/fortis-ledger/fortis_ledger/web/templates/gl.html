@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Account transactions{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Account transactions</h1><p class="muted">{{ start|longdate }} to {{ end|longdate }}</p></div>
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="actions">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="general_ledger">
+    <input type="hidden" name="start" value="{{ start|dmy }}"><input type="hidden" name="end" value="{{ end|dmy }}">
+    <input type="hidden" name="codes" value="{{ code }}"><input type="hidden" name="open" value="yes">
+    <button class="btn" name="format" value="pdf"{% if readonly %} disabled{% endif %}>PDF</button>
+    <button class="btn" name="format" value="xlsx"{% if readonly %} disabled{% endif %}>Excel</button>
+  </form>
+</div>
+<form method="get" class="toolbar">
+  {{ m.fy_field() }}
+  <label for="code">Account</label><input id="code" name="code" value="{{ code }}" list="dl-accounts" class="mono" placeholder="All accounts">
+  <label for="start">From</label><input id="start" name="start" value="{{ start|dmy }}" class="date">
+  <label for="end">To</label><input id="end" name="end" value="{{ end|dmy }}" class="date">
+  <button class="btn">Show</button>
+</form>
+{{ m.account_datalist(accounts) }}
+{% for acc in data %}
+<h2 class="account-head"><a href="{{ url_for('ui.account_edit', slug=client.slug, code=acc.code) }}">{{ acc.code }}</a> {{ acc.name }}
+  <span class="muted mono small">{{ acc.report_code }}</span></h2>
+<table class="grid">
+  <thead><tr><th>Date</th><th>Journal</th><th>Narration / description</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead>
+  <tbody>
+    <tr class="muted"><td>{{ start|dmy }}</td><td></td><td>Opening balance</td><td></td><td></td><td class="num">{{ acc.opening|money0 }}</td></tr>
+    {% for e in acc.entries %}
+    <tr><td class="nowrap">{{ e.date|dmy }}</td>
+      <td class="nowrap"><a href="{{ url_for('ui.journal_view', slug=client.slug, jfy=fy, number=e.number) }}">{{ e.number }}</a></td>
+      <td>{{ e.narration }}{% if e.description %} <span class="muted">- {{ e.description }}</span>{% endif %}</td>
+      <td class="num">{{ e.debit|money }}</td><td class="num">{{ e.credit|money }}</td><td class="num">{{ e.balance|money0 }}</td></tr>
+    {% endfor %}
+  </tbody>
+  <tfoot><tr class="total"><td></td><td></td><td>Closing balance</td><td class="num">{{ acc.debits|money0 }}</td><td class="num">{{ acc.credits|money0 }}</td><td class="num">{{ acc.closing|money0 }}</td></tr></tfoot>
+</table>
+{% else %}
+<div class="panel empty">No transactions{% if code %} in {{ code }}{% endif %} for this period.</div>
+{% endfor %}
+<p class="help">Balances are debit positive; credits show in brackets.</p>
+{% endblock %}

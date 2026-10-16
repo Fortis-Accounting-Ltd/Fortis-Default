@@ -51,18 +51,37 @@ def slugify(name: str) -> str:
     return (s or "client")[:40].strip("-")
 
 
+def replace_file(tmp: Path, path: Path, attempts: int = 8) -> None:
+    """os.replace, retried briefly: on Windows OneDrive can hold a file open for a moment while it uploads."""
+    for i in range(attempts):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if i == attempts - 1:
+                tmp.unlink(missing_ok=True)
+                raise StoreError(f"{path.name} is in use (OneDrive syncing?) - try again in a moment") from None
+            time.sleep(0.25 * (i + 1))
+
+
 def write_json(path: Path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex[:8]}.tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    replace_file(tmp, path)
 
 
-def read_json(path: Path, default=None):
+def read_json(path: Path, default=None, quiet: bool = False):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return default
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        # a file the sync client is still downloading, or a damaged copy
+        if quiet:
+            return default
+        raise StoreError(f"{path.name} is not readable - check it in SharePoint (version history) "
+                         f"or wait for OneDrive to finish syncing") from None
 
 
 class FolderStore:
@@ -186,8 +205,9 @@ class FolderStore:
             return []
         out = []
         for p in jd.glob("*.json"):
-            data = read_json(p)
-            if data:
+            data = read_json(p, None, quiet=True)
+            # only the journal's own file counts; sync conflict copies ("J2026-0001-PC2.json") are reported
+            if data and data.get("number") == p.stem:
                 out.append(Journal.from_dict(data))
         return sorted(out, key=lambda j: (j.date, j.number))
 
@@ -208,9 +228,76 @@ class FolderStore:
     def save_journal(self, slug: str, fy: int, journal: Journal) -> Journal:
         self.ensure_year(slug, fy)
         if not journal.number:
-            journal.number = self.next_journal_number(slug, fy)
+            journal.number = self._claim_number(slug, fy)
         write_json(self.journal_dir(slug, fy) / f"{_safe_number(journal.number)}.json", journal.to_dict())
         return journal
+
+    def _claim_number(self, slug: str, fy: int) -> str:
+        """Next journal number, claimed by creating its file so two windows never take the same one."""
+        jd = self.journal_dir(slug, fy)
+        seq = int(self.next_journal_number(slug, fy).split("-")[1])
+        for _ in range(1000):
+            number = f"J{fy}-{seq:04d}"
+            try:
+                os.close(os.open(jd / f"{number}.json", os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+                return number
+            except FileExistsError:
+                seq += 1
+        raise StoreError(f"could not allocate a journal number in FY{fy}")
+
+    def list_reports(self, slug: str, fy: int) -> list[Path]:
+        d = self.year_dir(slug, fy) / "reports"
+        if not d.exists():
+            return []
+        return sorted((p for p in d.iterdir() if p.is_file() and not p.name.startswith(".")),
+                      key=lambda p: p.stat().st_mtime, reverse=True)
+
+    # ---- sync health ------------------------------------------------------------------- #
+    def conflicts(self, slug: str) -> list[str]:
+        """
+        Files the sync client left beside the real ones: conflict copies ('client-PC2.json',
+        'J2026-0003 (1).json'), journals whose file name does not match their number, half-written
+        temporary files.  Each needs a person to decide which copy is right.
+        """
+        root = self.client_dir(slug)
+        found = []
+        if not root.exists():
+            return found
+        expected_top = {"client.json", "chart.csv", "audit.jsonl", "lock.json", "years"}
+        for p in root.iterdir():
+            if p.name not in expected_top and not _ignorable(p.name):
+                found.append(p.relative_to(root).as_posix())
+        for fy in self.list_years(slug):
+            yd = self.year_dir(slug, fy)
+            for p in yd.iterdir():
+                if p.name not in {"year.json", "journals", "reports"} and not _ignorable(p.name):
+                    found.append(p.relative_to(root).as_posix())
+            jd = self.journal_dir(slug, fy)
+            for p in (jd.iterdir() if jd.exists() else []):
+                if p.name.lower() in OS_FILES:
+                    continue
+                if p.name.startswith("."):
+                    if p.name.endswith(".tmp") and time.time() - p.stat().st_mtime > 3600:
+                        found.append(p.relative_to(root).as_posix())
+                    continue
+                if not re.fullmatch(rf"J{fy}-\d{{4,}}\.json", p.name):
+                    found.append(p.relative_to(root).as_posix())
+                    continue
+                data = read_json(p, None, quiet=True)
+                if not data or data.get("number") != p.stem:
+                    found.append(p.relative_to(root).as_posix())
+        return sorted(found)
+
+    def archive_client(self, slug: str) -> Path:
+        """Move a client out of the client list into <root>/archived/ (nothing is deleted)."""
+        self.require_lock(slug)
+        src = self.client_dir(slug)
+        self.audit(slug, "client.archived", {})
+        self.release_lock(slug)
+        dst = self.root / "archived" / f"{slug}-{time.strftime('%Y%m%d-%H%M%S')}"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dst))
+        return dst
 
     # ---- change log --------------------------------------------------------------------- #
     def audit(self, slug: str, action: str, detail: dict) -> None:
@@ -221,6 +308,24 @@ class FolderStore:
             fh.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
             fh.flush()
             os.fsync(fh.fileno())
+
+    def last_audit(self, slug: str) -> dict | None:
+        """The newest change-log entry, read from the end of the file."""
+        path = self.client_dir(slug) / "audit.jsonl"
+        try:
+            with open(path, "rb") as fh:
+                fh.seek(0, os.SEEK_END)
+                size = fh.tell()
+                fh.seek(max(0, size - 8192))
+                tail = fh.read().decode("utf-8", "replace").splitlines()
+        except FileNotFoundError:
+            return None
+        for line in reversed(tail):
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                continue
+        return None
 
     def read_audit(self, slug: str, limit: int = 500) -> list[dict]:
         path = self.client_dir(slug) / "audit.jsonl"
@@ -238,7 +343,7 @@ class FolderStore:
 
     # ---- edit lock ---------------------------------------------------------------------- #
     def lock_info(self, slug: str) -> dict | None:
-        info = read_json(self.client_dir(slug) / "lock.json")
+        info = read_json(self.client_dir(slug) / "lock.json", None, quiet=True)
         if not info:
             return None
         info["stale"] = time.time() - float(info.get("heartbeat", 0)) > LOCK_STALE_SECONDS
@@ -271,6 +376,14 @@ class FolderStore:
         if not ok:
             raise LockedError(f"{info.get('user')} is editing this client on {info.get('machine')} - "
                               f"open it read-only or ask them to close it.")
+
+
+OS_FILES = {"desktop.ini", "thumbs.db", ".ds_store"}
+
+
+def _ignorable(name: str) -> bool:
+    """Hidden files (our own temporary files) and the files Windows / macOS put in folders."""
+    return name.startswith(".") or name.lower() in OS_FILES
 
 
 def _safe_number(number: str) -> str:

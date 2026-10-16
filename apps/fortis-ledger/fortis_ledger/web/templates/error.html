@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}{% if code == 200 %}Closed{% else %}Problem{% endif %}{% endblock %}
+{% block content %}
+<div class="panel narrow center">
+  {% if code != 200 %}<h1>{{ {400: "That didn't work", 403: "Not available", 404: "Not found", 405: "Not allowed", 409: "Can't do that", 413: "File too large"}.get(code, "Something went wrong") }}</h1>{% endif %}
+  <p>{{ message }}</p>
+  {% if code != 200 and code != 403 %}
+  <p><a class="btn" href="{{ url_for('ui.overview', slug=client.slug) if client else url_for('ui.clients') }}">Back</a></p>
+  {% endif %}
+</div>
+{% endblock %}

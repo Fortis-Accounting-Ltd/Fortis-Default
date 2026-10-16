@@ -1,0 +1,37 @@
+{% macro csrf() -%}
+<input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+{%- endmacro %}
+
+{% macro fy_field() -%}
+<input type="hidden" name="fy" value="{{ fy }}">
+{%- endmacro %}
+
+{% macro post_button(action, label, cls="btn", confirm=None, fields=None, disabled=False) -%}
+<form method="post" action="{{ action }}" class="inline-form"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
+  {{ csrf() }}
+  {% for k, v in (fields or {}).items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  <button type="submit" class="{{ cls }}"{% if disabled %} disabled{% endif %}>{{ label }}</button>
+</form>
+{%- endmacro %}
+
+{% macro account_datalist(accounts, id="dl-accounts") -%}
+<datalist id="{{ id }}">
+  {% for code, name, rc in accounts %}<option value="{{ code }}">{{ code }} {{ name }}</option>
+  {% endfor %}
+</datalist>
+{%- endmacro %}
+
+{% macro code_datalist(codes, id="dl-codes") -%}
+<datalist id="{{ id }}">
+  {% for rc, desc in codes %}<option value="{{ rc }}">{{ desc }}</option>
+  {% endfor %}
+</datalist>
+{%- endmacro %}
+
+{% macro status_badge(j) -%}
+<span class="badge {{ j.status }}">{{ j.status|capitalize }}</span>
+{%- endmacro %}
+
+{% macro kind_label(kind) -%}
+{{ {"manual": "Manual", "import": "Import", "opening": "Opening balances", "close": "Year-end close", "reversal": "Reversal"}.get(kind, kind) }}
+{%- endmacro %}

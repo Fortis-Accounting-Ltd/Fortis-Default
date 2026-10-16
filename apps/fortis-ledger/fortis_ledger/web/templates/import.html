@@ -1,0 +1,65 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Import{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Import</h1></div>
+<p class="help">Every import is shown to you first - which account each line goes to, new accounts, rounding - and nothing is posted until you confirm.</p>
+{% if readonly %}<div class="panel">Read only - you cannot import while someone else is editing this client.</div>{% else %}
+<div class="cards two">
+  <form method="post" action="{{ url_for('ui.import_upload', slug=client.slug) }}" enctype="multipart/form-data" class="card" id="balances">
+    {{ m.csrf() }}<input type="hidden" name="kind" value="balances">
+    <h2>Trial balance or account balances</h2>
+    <p class="help">A trial balance or list of classified accounts (CSV or Excel): code, name and either Debit / Credit, one Balance column, or
+      this-year and prior-year columns. Report codes or Xero account types in the file are used if present. Xero's Trial Balance export works as it is.</p>
+    <label for="b-file">File</label><input id="b-file" type="file" name="file" accept=".csv,.txt,.xlsx,.xlsm" required>
+    <div class="form-grid compact">
+      <label for="b-fy">Financial year</label><input id="b-fy" name="fy" value="{{ fy }}" class="short" inputmode="numeric">
+      <label for="b-mode">The figures are</label>
+      <select id="b-mode" name="mode"><option value="year_end">Closing balances at the year end</option>
+        <option value="opening">Opening balances at the start of the year</option></select>
+      <label for="b-sign">One balance column?</label>
+      <select id="b-sign" name="sign"><option value="auto">Work out the signs</option>
+        <option value="debit">Positive = debit, negative = credit</option>
+        <option value="natural">Positive = the account's normal side (income, liabilities and equity are credits)</option></select>
+      <label for="b-sheet">Excel sheet</label><input id="b-sheet" name="sheet" placeholder="First sheet">
+      <label for="b-complete">Accounts not in the file</label>
+      <select id="b-complete" name="complete"><option value="yes">Set to nil (the file is the whole trial balance)</option>
+        <option value="no">Leave as they are (the file is only some accounts)</option></select>
+    </div>
+    <p class="help">Importing again replaces the earlier import of the same year, so you can re-import a corrected file.</p>
+    <button class="btn primary">Upload and check</button>
+  </form>
+
+  <form method="post" action="{{ url_for('ui.import_upload', slug=client.slug) }}" enctype="multipart/form-data" class="card" id="workpaper">
+    {{ m.csrf() }}<input type="hidden" name="kind" value="workpaper">
+    <h2>Fortis workpaper</h2>
+    <p class="help">The year-end workpaper (Excel) with Profit &amp; Loss and Balance Sheet tabs, or an ITR Business tab. Each line is matched to the
+      client's chart by nature, the same way the financial-report-builder skill does it.</p>
+    <label for="w-file">Workpaper</label><input id="w-file" type="file" name="file" accept=".xlsx,.xlsm" required>
+    <div class="form-grid compact">
+      <label for="w-fy">Financial year</label><input id="w-fy" name="fy" value="{{ fy }}" class="short" inputmode="numeric">
+    </div>
+    <button class="btn primary">Upload and check</button>
+  </form>
+
+  <form method="post" action="{{ url_for('ui.import_upload', slug=client.slug) }}" enctype="multipart/form-data" class="card" id="journals">
+    {{ m.csrf() }}<input type="hidden" name="kind" value="journals">
+    <h2>Journals</h2>
+    <p class="help">Xero's manual journal import file (<code>*Narration, *Date, *AccountCode, *Amount</code>, positive = debit) or a
+      Date / Reference / Narration / Account / Debit / Credit file. Lines with the same reference (or narration and date) make one journal.</p>
+    <label for="j-file">File</label><input id="j-file" type="file" name="file" accept=".csv,.txt,.xlsx,.xlsm" required>
+    <div class="form-grid compact"><label for="j-sheet">Excel sheet</label><input id="j-sheet" name="sheet" placeholder="First sheet"></div>
+    <button class="btn primary">Upload and check</button>
+  </form>
+
+  <form method="post" action="{{ url_for('ui.import_upload', slug=client.slug) }}" enctype="multipart/form-data" class="card" id="chart">
+    {{ m.csrf() }}<input type="hidden" name="kind" value="chart">
+    <h2>Chart of accounts</h2>
+    <p class="help">A chart exported from Xero (Accounting &gt; Chart of accounts &gt; Export) or another client. New codes are added and
+      existing codes take the file's name, type and report code.</p>
+    <label for="c-file">Chart CSV</label><input id="c-file" type="file" name="file" accept=".csv" required>
+    <label class="check"><input type="checkbox" name="replace" value="yes"> Also remove accounts that are not in the file (only unused ones)</label>
+    <button class="btn primary">Upload and check</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

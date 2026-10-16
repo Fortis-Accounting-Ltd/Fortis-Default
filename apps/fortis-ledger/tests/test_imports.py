@@ -227,6 +227,7 @@ def test_xero_api_migration(tmp_path, store):
         {"AccountID": "a3", "Code": "090", "Name": "Bank", "Type": "BANK", "ReportingCode": "ASS.CUR.CAS.BAN"},
         {"AccountID": "a4", "Code": "960", "Name": "Retained Earnings", "Type": "EQUITY", "ReportingCode": "EQU.RET"},
         {"AccountID": "a5", "Code": "970", "Name": "Owner A Share Capital", "Type": "EQUITY", "ReportingCode": "EQU.SHA"},
+        {"AccountID": "a6", "Name": "Savings Account", "Type": "BANK", "ReportingCode": "ASS.CUR.CAS.BAN"},   # no code
     ]}
 
     def tb(rows):
@@ -242,16 +243,21 @@ def test_xero_api_migration(tmp_path, store):
                               "RegistrationNumber": "64640451663", "FinancialYearEndMonth": 6, "FinancialYearEndDay": 30,
                               "OrganisationID": "org1", "Class": "LEDGER"}]}
     tbs = {2025: tb([("a1", "200", "Sales", "", "1000.00"), ("a2", "400", "Advertising", "200.00", ""),
-                     ("a3", "090", "Bank", "900.00", ""), ("a5", "970", "Owner A Share Capital", "", "100.00")]),
+                     ("a3", "090", "Bank", "850.00", ""), ("a6", "", "Savings Account", "50.00", ""),
+                     ("a5", "970", "Owner A Share Capital", "", "100.00")]),
            2026: tb([("a1", "200", "Sales", "", "2000.00"), ("a2", "400", "Advertising", "500.00", ""),
-                     ("a3", "090", "Bank", "2400.00", ""), ("a4", "960", "Retained Earnings", "", "800.00"),
+                     ("a3", "090", "Bank", "2300.00", ""), ("a6", "", "Savings Account", "100.00", ""),
+                     ("a4", "960", "Retained Earnings", "", "800.00"),
                      ("a5", "970", "Owner A Share Capital", "", "100.00")])}
     client, results = xero.migrate_from_api(store, org, accounts, tbs, tmp_path)
     assert client.abn == "64 640 451 663" and client.type == "company"
     L = Ledger(store, client.slug)
-    assert {a.code for a in L.chart.accounts} == {"200", "400", "090", "960", "970"}
+    # the code-less bank account gets one code, used in both years (no duplicate account in year two)
+    assert {a.code for a in L.chart.accounts} == {"200", "400", "090", "960", "970", "BANK1"}
+    assert all(not r["result"]["created_accounts"] for r in results)
     assert L.client.retained_earnings_account == "960"
-    assert L.closing(2026)["090"] == Decimal("2400.00") and L.closing(2026)["960"] == Decimal("-800.00")
+    assert L.closing(2026)["090"] == Decimal("2300.00") and L.closing(2026)["BANK1"] == Decimal("100.00")
+    assert L.closing(2026)["960"] == Decimal("-800.00")
     pk = fr_engine.Pack(L.pack(2026), REPORT_MAP)
     assert not pk.has_errors(), pk.validation_markdown()
     assert json.dumps(results[0]["result"])

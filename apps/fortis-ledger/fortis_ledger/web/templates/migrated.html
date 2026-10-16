@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Moved from Xero{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ client.name }} is in the ledger</h1>
+  <div class="actions"><a class="btn primary" href="{{ url_for('ui.overview', slug=client.slug) }}">Go to the client</a></div>
+</div>
+<p>Compare each year's trial balance with the one from Xero, then generate the Financial Reports.</p>
+{% for y in res.years %}
+<div class="panel">
+  <h2>FY{{ y.fy }}</h2>
+  <p>{{ y.journals|length }} journal(s) posted{% if y.journals %} ({{ y.journals|join(", ") }}){% endif %}{% if y.created %}, {{ y.created|length }} new account(s){% endif %}.
+    <a href="{{ url_for('ui.trial_balance', slug=client.slug, fy=y.fy) }}">Trial balance</a></p>
+  {% for w in y.warnings %}<div class="flash warn">{{ w }}</div>{% endfor %}
+  {% if y.review %}
+  <h3>Check these accounts' report codes</h3>
+  <table class="grid compact"><thead><tr><th>Account</th><th>Report code</th><th>Why</th></tr></thead>
+    <tbody>{% for r in y.review %}<tr><td><a href="{{ url_for('ui.account_edit', slug=client.slug, code=r.account) }}">{{ r.account }}</a> {{ r.name }}</td>
+      <td class="mono">{{ r.report_code }}</td><td class="small">{{ r.reason }}</td></tr>{% endfor %}</tbody></table>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

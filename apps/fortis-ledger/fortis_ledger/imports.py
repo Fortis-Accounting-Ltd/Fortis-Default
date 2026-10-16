@@ -311,9 +311,13 @@ def plan_balances(ledger: Ledger, rows: list[BalanceRow], fy: int, mode: str = "
             if not section and rc_in:
                 section = _section_for_code(rc_in)
             exact = ledger.chart.by_name(r.name)
-            if exact is not None and not exact.system and not rc_in:
+            # a row without a code is known only by its name; a row with its own code and report code is
+            # the file's own account (it becomes a new account rather than joining a same-named one)
+            if exact is not None and not exact.system and (not rc_in or not r.code):
                 pl.account, pl.account_name, pl.report_code = exact.code, exact.name, exact.report_code
                 pl.confidence, pl.reason = "name", "same account name in the client's chart"
+                if rc_in and rc_in != exact.report_code:
+                    pl.reason += f" (file says {rc_in}; the chart's {exact.report_code} is used)"
             else:
                 if rc_in:
                     rc, conf, why, review = rc_in, "file", "report code from the file", False
@@ -404,6 +408,45 @@ def _plan_checks(ledger: Ledger, plan: Plan) -> None:
                                  f"balance-sheet only; post last year's result to retained earnings instead")
     if ledger.is_locked(plan.fy):
         plan.warnings.append(f"FY{plan.fy} is locked - unlock it before importing")
+
+
+def recheck(ledger: Ledger, plan: Plan) -> list[str]:
+    """
+    After the user has changed lines in the preview (post to another account, new account, skip):
+    describe each line again, give new accounts a code, and redo the checks.  Returns the problems
+    that stop the import.
+    """
+    problems = []
+    new_codes: dict[str, str] = {}
+    for pl in plan.lines:
+        pl.account = (pl.account or "").strip()
+        pl.report_code = (pl.report_code or "").strip().upper()
+        where = f"line {pl.line} ({pl.source_name})"
+        if pl.action == "post":
+            a = ledger.chart.get(pl.account)
+            if a is None:
+                problems.append(f"{where}: account {pl.account or '(blank)'} is not in the chart - pick one or make it a new account")
+            elif a.system:
+                problems.append(f"{where}: {a.code} {a.name} is a Xero system account")
+            else:
+                pl.account_name, pl.report_code = a.name, a.report_code
+        elif pl.action == "new":
+            if pl.account and ledger.chart.get(pl.account):
+                problems.append(f"{where}: account {pl.account} already exists - post to it or use another code")
+            if pl.account and pl.account in new_codes and new_codes[pl.account] != pl.account_name:
+                problems.append(f"{where}: new account {pl.account} is also used for '{new_codes[pl.account]}'")
+            if pl.account:
+                new_codes[pl.account] = pl.account_name
+            if not (pl.account_name or "").strip():
+                pl.account_name = pl.source_name
+            if slot_of(pl.report_code) is None:
+                problems.append(f"{where}: report code {pl.report_code or '(blank)'} is not a known report code")
+        if pl.report_code and pl.action != "skip":
+            pl.prints_as = describe(pl.report_code, pl.account_name)
+    _allocate_codes(ledger, plan)
+    plan.warnings = []
+    _plan_checks(ledger, plan)
+    return problems
 
 
 # ---------------------------------------------------------------------------------------- #
@@ -642,6 +685,26 @@ def plan_workpaper(ledger: Ledger, path: str | Path, fy: int, pl_sheet: str = "P
     _allocate_codes(ledger, plan)
     _plan_checks(ledger, plan)
     return plan
+
+
+AS_AT_RE = re.compile(r"\b(?:as at|year ended|period ended|year ending)\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4}|"
+                      r"\d{1,2}/\d{1,2}/\d{4}|\d{4}-\d{2}-\d{2})", re.I)
+
+
+def detect_as_at(rows: list[list]):
+    """The 'As at 30 June 2026' date in the title rows of a Xero report export, or None."""
+    import datetime as _dt
+    for row in rows[:10]:
+        for v in row:
+            if isinstance(v, _dt.datetime):
+                continue
+            m = AS_AT_RE.search(str(v or ""))
+            if m:
+                try:
+                    return parse_date(m.group(1))
+                except ValueError:
+                    continue
+    return None
 
 
 def plan_from_file(ledger: Ledger, path: str | Path, fy: int, mode: str = "year_end", sign: str = "auto",

@@ -6,12 +6,12 @@ chart module; edits are written here so the app never exits on a bad edit.
 from __future__ import annotations
 
 import csv
-import os
 import re
 import uuid
 from pathlib import Path
 
 from .engine import chartlib, describe, slot_of
+from .store import StoreError, replace_file
 
 XERO_HEADER = ["*Code", "Report Code", "*Name", "Reporting Name", "*Type", "*Tax Code", "Description",
                "Dashboard", "Expense Claims", "Enable Payments"]
@@ -181,6 +181,12 @@ class ClientChart:
             self.save()
         return changes
 
+    def remove(self, code: str) -> None:
+        """Delete an account (the caller checks that no journal uses it)."""
+        row = self._row(code)
+        self.rows.remove(row)
+        self.save()
+
     def next_code(self, base: str) -> str:
         """A free code near `base`: 61100 -> 61100.1, 61100.2 ...; 'X' -> X1, X2 ..."""
         base = (base or "").strip() or "9"
@@ -199,7 +205,10 @@ class ClientChart:
             w = csv.DictWriter(fh, fieldnames=self.header, extrasaction="ignore")
             w.writeheader()
             w.writerows(self.rows)
-        os.replace(tmp, self.path)
+        try:
+            replace_file(tmp, self.path)
+        except StoreError as e:
+            raise ChartError(str(e)) from None
         self.reload()
 
     # ---- whole-chart import ------------------------------------------------------------- #

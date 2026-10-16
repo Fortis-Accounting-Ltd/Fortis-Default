@@ -1,0 +1,96 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ client.name }}</h1>
+    <p class="muted">{{ client.type|entity }}{% if client.legal_name %} · {{ client.legal_name }}{% endif %}{% if client.abn %} · ABN {{ client.abn }}{% endif %}
+      · year ends {{ client.fy_end_day }} {{ ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][client.fy_end_month] }}</p>
+  </div>
+  {% if started %}
+  <div class="actions">
+    {% if not readonly and not year_locked %}<a class="btn primary" href="{{ url_for('ui.journal_new', slug=client.slug, fy=fy) }}">New journal</a>{% endif %}
+    <a class="btn" href="{{ url_for('ui.import_start', slug=client.slug, fy=fy) }}">Import</a>
+    <a class="btn" href="{{ url_for('ui.reports_page', slug=client.slug, fy=fy) }}">Reports</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if conflicts %}
+<div class="banner warn">
+  <span><strong>OneDrive left {{ conflicts|length }} file(s) that need a look.</strong> These are usually conflict copies made when two PCs
+  changed the same file before syncing. Open the client's folder, compare each one with the real file, keep the right one and delete the other:</span>
+  <ul class="small">{% for c in conflicts[:10] %}<li><code>{{ c }}</code></li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if not years %}
+<div class="panel">
+  <h2>Start the first financial year</h2>
+  <p>Load balances for the earliest year you need - usually last year's closing trial balance, so this year's reports show comparatives.</p>
+  {% if not readonly %}
+  <form method="post" action="{{ url_for('ui.year_start', slug=client.slug) }}" class="inline">
+    {{ m.csrf() }}
+    <label for="new_fy">FY</label><input id="new_fy" name="new_fy" value="{{ fy }}" class="short" inputmode="numeric">
+    <button class="btn primary">Start year</button>
+  </form>
+  {% endif %}
+</div>
+{% else %}
+
+{% if figures %}
+<h2>FY{{ fy }} at a glance <span class="muted">({{ fy_start|dmy }} – {{ fy_end|dmy }})</span></h2>
+<div class="stats">
+  <div class="stat"><span>Income</span><strong>{{ figures.income|money0 }}</strong></div>
+  <div class="stat"><span>Expenses</span><strong>{{ figures.expenses|money0 }}</strong></div>
+  <div class="stat"><span>Net profit</span><strong>{{ figures.profit|money0 }}</strong></div>
+  {% if figures.appropriations %}<div class="stat"><span>{{ "Dividends" if client.type == "company" else "Distributions" }}</span><strong>{{ figures.appropriations|money0 }}</strong></div>{% endif %}
+  <div class="stat"><span>Total assets</span><strong>{{ figures.assets|money0 }}</strong></div>
+  <div class="stat"><span>Total liabilities</span><strong>{{ figures.liabilities|money0 }}</strong></div>
+  <div class="stat"><span>Net assets</span><strong>{{ figures.net_assets|money0 }}</strong></div>
+</div>
+{% endif %}
+
+<h2>Financial years</h2>
+<table class="grid">
+  <thead><tr><th>Year</th><th>Period</th><th>Status</th><th class="num">Journals</th><th class="num">Drafts</th>
+    <th class="num">Net profit</th><th>Trial balance</th><th>Year end</th></tr></thead>
+  <tbody>
+  {% for y in year_rows %}
+  <tr{% if y.fy == fy %} class="current"{% endif %}>
+    <td><a href="{{ url_for('ui.overview', slug=client.slug, fy=y.fy) }}">FY{{ y.fy }}</a></td>
+    <td class="nowrap">{{ y.range[0]|dmy }} – {{ y.range[1]|dmy }}</td>
+    <td>{% if y.locked %}<span class="badge locked">Locked</span>{% else %}<span class="badge open">Open</span>{% endif %}</td>
+    <td class="num"><a href="{{ url_for('ui.journals', slug=client.slug, fy=y.fy) }}">{{ y.posted }}</a></td>
+    <td class="num">{% if y.drafts %}<a href="{{ url_for('ui.journals', slug=client.slug, fy=y.fy, status='draft') }}">{{ y.drafts }}</a>{% else %}<span class="muted">0</span>{% endif %}</td>
+    <td class="num">{{ y.profit|money0 }}</td>
+    <td>{% if y.difference %}<span class="err-text">Out by {{ y.difference|money0 }}</span>{% else %}<a href="{{ url_for('ui.trial_balance', slug=client.slug, fy=y.fy) }}">Balanced</a>{% endif %}</td>
+    <td>
+      {% if y.close.rolled_forward %}
+        {% if y.close.stale %}<a class="badge review" href="{{ url_for('ui.year_end', slug=client.slug, fy=y.fy) }}">Close needs refreshing</a>
+        {% elif y.close.needed and not y.close.journal %}<a class="badge review" href="{{ url_for('ui.year_end', slug=client.slug, fy=y.fy) }}">Close not posted</a>
+        {% else %}<span class="muted">Rolled forward{% if y.close.journal %} ({{ y.close.journal }}){% endif %}</span>{% endif %}
+      {% else %}<a href="{{ url_for('ui.year_end', slug=client.slug, fy=y.fy) }}">Roll forward to FY{{ y.fy + 1 }}</a>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if not readonly %}
+<form method="post" action="{{ url_for('ui.year_start', slug=client.slug) }}" class="inline small mt">
+  {{ m.csrf() }}<input type="hidden" name="new_fy" value="{{ years[0] - 1 }}">
+  <button class="btn link">Add FY{{ years[0] - 1 }} (an earlier year, e.g. for comparatives)</button>
+</form>
+{% endif %}
+{% endif %}
+
+<h2>Recent changes</h2>
+<table class="grid compact">
+  <tbody>
+  {% for a in activity %}
+  <tr><td class="nowrap">{{ a.at|when }}</td><td class="nowrap">{{ a.user }}</td><td><code>{{ a.action }}</code></td><td>{{ a|audit_text }}</td></tr>
+  {% else %}<tr><td class="empty">Nothing yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+<p><a href="{{ url_for('ui.change_log', slug=client.slug) }}">Full change log</a></p>
+{% endblock %}

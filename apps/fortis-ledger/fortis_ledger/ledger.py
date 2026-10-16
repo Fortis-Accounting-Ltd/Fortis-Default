@@ -21,7 +21,7 @@ from collections import defaultdict
 from decimal import Decimal
 
 from .chartbook import ChartError, ClientChart, code_sort_key, is_pl_account
-from .engine import nature
+from .engine import nature, slot_of
 from .model import Journal, Line, now_iso, parse_date
 from .money import ZERO, as_str, q2
 from .store import FolderStore, StoreError
@@ -54,6 +54,13 @@ class Ledger:
     def is_pl(self, code: str) -> bool:
         a = self.chart.get(code)
         return bool(a) and is_pl_account(a.report_code, a.type)
+
+    def is_appropriation(self, code: str) -> bool:
+        """Dividends and trust / partnership distributions coded to the P&L - they print below Net Profit After Tax."""
+        a = self.chart.get(code)
+        if not a or not is_pl_account(a.report_code, a.type):
+            return False
+        return (slot_of(a.report_code, a.name) or "").startswith(("EQU.DIV", "EXP.DIS"))
 
     def retained_earnings_code(self, create: bool = True) -> str:
         c = self.client.retained_earnings_account
@@ -292,8 +299,12 @@ class Ledger:
         total_dr = sum((r["debit"] for r in rows), ZERO)
         total_cr = sum((r["credit"] for r in rows), ZERO)
         pl = sum((r["balance"] for r in rows if self.is_pl(r["code"])), ZERO)
+        appropriations = sum((r["balance"] for r in rows if self.is_appropriation(r["code"])), ZERO)
+        # profit = Net Profit After Tax, as the Financial Reports show it (before dividends / distributions);
+        # retained = what goes to retained earnings at the year end
         return {"rows": rows, "total_debit": total_dr, "total_credit": total_cr,
-                "difference": total_dr - total_cr, "profit": -pl,
+                "difference": total_dr - total_cr, "profit": -(pl - appropriations),
+                "appropriations": appropriations, "retained": -pl,
                 "as_at": upto or self.fy_range(fy)[1]}
 
     def general_ledger(self, fy: int, start: dt.date | None = None, end: dt.date | None = None,

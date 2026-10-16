@@ -1,0 +1,69 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}{% if new %}New journal{% else %}{{ j.number }}{% endif %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{% if new %}New journal{% else %}{{ j.number }} {{ m.status_badge(j) }}{% endif %} <span class="muted">FY{{ jfy }}</span></h1>
+  {% if not new %}<div class="actions"><a class="btn" href="{{ url_for('ui.journal_view', slug=client.slug, jfy=jfy, number=j.number) }}">Cancel</a></div>{% endif %}
+</div>
+{% if errors %}
+<div class="flash error" role="alert"><strong>The journal was not {% if new %}saved{% else %}changed{% endif %}:</strong>
+  <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+{% endif %}
+<form method="post" action="{{ url_for('ui.journal_save', slug=client.slug) }}" id="journal-form" class="panel" autocomplete="off">
+  {{ m.csrf() }}
+  <input type="hidden" name="number" value="{{ j.number }}">
+  <input type="hidden" name="jfy" value="{{ jfy }}">
+  <input type="hidden" name="fy" value="{{ jfy }}">
+  <div class="form-row">
+    <div class="field"><label for="date">Date</label>
+      <input id="date" name="date" value="{{ date_text }}" required class="date" placeholder="30/06/{{ jfy }}"></div>
+    <div class="field grow"><label for="narration">Narration</label>
+      <input id="narration" name="narration" value="{{ j.narration }}" required placeholder="e.g. Depreciation for the year"></div>
+    <div class="field"><label for="reference">Reference</label>
+      <input id="reference" name="reference" value="{{ j.reference }}"></div>
+  </div>
+  <table class="grid lines" id="journal-lines">
+    <thead><tr><th class="acct">Account</th><th>Description</th><th class="num">Debit</th><th class="num">Credit</th><th></th></tr></thead>
+    <tbody>
+    {% for ln in lines %}
+    <tr>
+      <td class="acct"><input name="account_{{ loop.index0 }}" value="{{ ln.account }}" list="dl-accounts" class="account" aria-label="Account">
+        <span class="acct-name muted">{{ names.get(ln.account, "") }}</span></td>
+      <td><input name="desc_{{ loop.index0 }}" value="{{ ln.description }}" aria-label="Description"></td>
+      <td class="num"><input name="debit_{{ loop.index0 }}" value="{{ ln.debit }}" class="amount dr" inputmode="decimal" aria-label="Debit"></td>
+      <td class="num"><input name="credit_{{ loop.index0 }}" value="{{ ln.credit }}" class="amount cr" inputmode="decimal" aria-label="Credit"></td>
+      <td><button type="button" class="btn link remove-line" title="Remove line" aria-label="Remove line">×</button></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr class="total"><td><button type="button" class="btn small" id="add-line">Add a line</button></td><td class="right">Total</td>
+        <td class="num" id="total-dr">0.00</td><td class="num" id="total-cr">0.00</td><td></td></tr>
+      <tr><td></td><td class="right muted">Difference</td><td class="num" colspan="2" id="difference">0.00</td><td></td></tr>
+    </tfoot>
+  </table>
+  <template id="line-template">
+    <tr>
+      <td class="acct"><input name="account___i__" list="dl-accounts" class="account" aria-label="Account"><span class="acct-name muted"></span></td>
+      <td><input name="desc___i__" aria-label="Description"></td>
+      <td class="num"><input name="debit___i__" class="amount dr" inputmode="decimal" aria-label="Debit"></td>
+      <td class="num"><input name="credit___i__" class="amount cr" inputmode="decimal" aria-label="Credit"></td>
+      <td><button type="button" class="btn link remove-line" title="Remove line" aria-label="Remove line">×</button></td>
+    </tr>
+  </template>
+  {{ m.account_datalist(accounts) }}
+  <script type="application/json" id="account-names">{{ names|tojson }}</script>
+  <div class="actions">
+    <button class="btn primary" name="op" value="post">{% if not new and j.status == "posted" %}Save changes{% else %}Post{% endif %}</button>
+    {% if new %}<button class="btn" name="op" value="post_new">Post and add another</button>{% endif %}
+    {% if new or j.status == "draft" %}<button class="btn" name="op" value="draft" formnovalidate>Save as draft</button>{% endif %}
+    {% if new %}<a class="btn link" href="{{ url_for('ui.journals', slug=client.slug, fy=jfy) }}">Cancel</a>{% endif %}
+  </div>
+  <p class="help">Debits must equal credits before a journal can be posted. Drafts can be saved unbalanced and never affect the balances.
+    Amounts can be typed as <code>1234.5</code>, <code>1,234.50</code> or <code>(1,234.50)</code>.</p>
+</form>
+{% if not new and j.status == "draft" %}
+<form method="post" action="{{ url_for('ui.journal_delete', slug=client.slug, jfy=jfy, number=j.number) }}" class="inline-form"
+      data-confirm="Delete draft {{ j.number }}?">{{ m.csrf() }}<button class="btn danger small">Delete draft</button></form>
+{% endif %}
+{% endblock %}

@@ -72,5 +72,23 @@ def describe(report_code: str, name: str = "") -> str:
     return fr_engine.describe_code(report_code or "", name or "", REPORT_MAP)
 
 
+_codes: list[tuple[str, str]] | None = None
+
+
+def report_code_options() -> list[tuple[str, str]]:
+    """Every report code the firm charts and the report map use, with where each one prints."""
+    global _codes
+    if _codes is None:
+        found = {k for k in (REPORT_MAP.get("xero_code_map") or {}) if not k.startswith("_")}
+        found |= {k for k in (REPORT_MAP.get("bs_lines") or {}) if not k.startswith("_")}
+        for fname in chartlib.CHART_FILES.values():
+            try:
+                found |= {a.report_code for a in chartlib.Chart(CHART_DIR / fname).accounts if a.report_code}
+            except Exception:   # a damaged chart file must not stop the app
+                continue
+        _codes = sorted(((rc, describe(rc)) for rc in found if slot_of(rc)), key=lambda x: x[0])
+    return list(_codes)
+
+
 __all__ = ["SKILL_DIR", "CHART_DIR", "REPORT_MAP", "BOILERPLATE", "build_pack", "chartlib", "fr_engine",
-           "render_pack", "fonts", "slot_of", "nature", "describe"]
+           "render_pack", "fonts", "slot_of", "nature", "describe", "report_code_options"]

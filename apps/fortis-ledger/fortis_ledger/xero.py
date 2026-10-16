@@ -58,14 +58,35 @@ def client_fields_from_org(org_json: dict) -> dict:
             "source": {"xero_organisation_id": org.get("OrganisationID", ""), "xero_class": org.get("Class", "")}}
 
 
+def api_codes(accounts_json: dict) -> dict[str, str]:
+    """
+    AccountID -> account code.  Xero lets bank accounts (and a few others) go without a code; the ledger
+    needs one, so they get BANK1, BANK2 ... (ACC1 ... for other types), the same in the chart and in
+    every year's trial balance.
+    """
+    accs = [a for a in accounts_json.get("Accounts", []) if (a.get("Status") or "ACTIVE") != "DELETED"]
+    used = {(a.get("Code") or "").strip() for a in accs if (a.get("Code") or "").strip()}
+    out = {}
+    for a in sorted(accs, key=lambda a: ((a.get("Name") or "").lower(), a.get("AccountID") or "")):
+        code = (a.get("Code") or "").strip()
+        if not code:
+            prefix = "BANK" if (a.get("Type") or "").upper() == "BANK" else "ACC"
+            i = 1
+            while f"{prefix}{i}" in used:
+                i += 1
+            code = f"{prefix}{i}"
+            used.add(code)
+        out[a.get("AccountID")] = code
+    return out
+
+
 def chart_rows_from_api(accounts_json: dict) -> list[dict]:
     rows = []
+    codes = api_codes(accounts_json)
     for a in accounts_json.get("Accounts", []):
         if (a.get("Status") or "ACTIVE") == "DELETED":
             continue
-        code = (a.get("Code") or "").strip()
-        if not code:
-            continue   # Xero allows code-less accounts (e.g. some bank accounts); they get one on import
+        code = codes.get(a.get("AccountID")) or (a.get("Code") or "").strip()
         typ = API_TYPES.get((a.get("Type") or "").upper(), a.get("Type") or "")
         rc = (a.get("ReportingCode") or "").upper() or default_report_code(typ)
         rows.append({"*Code": code, "Report Code": rc, "*Name": a.get("Name", ""),
@@ -87,6 +108,7 @@ def write_chart_csv(rows: list[dict], path: str | Path) -> Path:
 def tb_rows_from_api(tb_json: dict, accounts_json: dict) -> list[BalanceRow]:
     """Reports/TrialBalance JSON -> balance rows (YTD debit - YTD credit)."""
     by_id = {a.get("AccountID"): a for a in accounts_json.get("Accounts", [])}
+    codes = api_codes(accounts_json)
     report = (tb_json.get("Reports") or [tb_json])[0]
     header = []
     out = []
@@ -112,7 +134,7 @@ def tb_rows_from_api(tb_json: dict, accounts_json: dict) -> list[BalanceRow]:
                 vals = {header[i] if i < len(header) else str(i): (c.get("Value") or "") for i, c in enumerate(cells)}
                 dr = vals.get("ytd debit", vals.get("debit", ""))
                 cr = vals.get("ytd credit", vals.get("credit", ""))
-                code = (acc.get("Code") or "").strip()
+                code = codes.get(acc_id) or (acc.get("Code") or "").strip()
                 name = acc.get("Name") or re.sub(r"\s*\([^)]*\)\s*$", "", label)
                 if not code:
                     m = re.search(r"\(([A-Za-z0-9.\-]{1,10})\)\s*$", label)
@@ -150,23 +172,37 @@ def migrate_from_api(store: FolderStore, org_json: dict, accounts_json: dict, tb
     fields = client_fields_from_org(org_json)
     chart_csv = write_chart_csv(chart_rows_from_api(accounts_json), Path(work_dir) / "xero-chart.csv")
     L = _new_client(store, fields, chart_csv)
-    results = []
-    for fy in sorted(tbs):
+
+    def plan_for(L: Ledger, fy: int):
         rows = tb_rows_from_api(tbs[fy], accounts_json)
-        plan = plan_balances(L, rows, fy, "year_end", f"Xero trial balance {L.fy_range(fy)[1]:%d/%m/%Y}",
+        return plan_balances(L, rows, fy, "year_end", f"Xero trial balance {L.fy_range(fy)[1]:%d/%m/%Y}",
                              {"source": "xero-api"})
-        results.append({"fy": fy, "plan": plan, "result": apply_plan(L, plan)})
-        L = Ledger(store, L.slug)
-    return L.client, results
+
+    return _load_years(store, L, sorted(tbs), plan_for)
 
 
 def migrate_from_files(store: FolderStore, fields: dict, chart_csv: str | Path, tb_files: dict[int, str | Path]
                        ) -> tuple[Client, list[dict]]:
     L = _new_client(store, fields, Path(chart_csv))
-    results = []
-    for fy in sorted(tb_files):
+
+    def plan_for(L: Ledger, fy: int):
         plan = plan_from_file(L, tb_files[fy], fy, "year_end")
+        plan.source = Path(tb_files[fy]).name
         plan.include_py = False
-        results.append({"fy": fy, "plan": plan, "result": apply_plan(L, plan)})
-        L = Ledger(store, L.slug)
+        return plan
+
+    return _load_years(store, L, sorted(tb_files), plan_for)
+
+
+def _load_years(store: FolderStore, L: Ledger, years: list[int], plan_for) -> tuple[Client, list[dict]]:
+    """Import each year's trial balance, oldest first.  If any year fails, the half-made client is archived."""
+    results = []
+    try:
+        for fy in years:
+            plan = plan_for(L, fy)
+            results.append({"fy": fy, "plan": plan, "result": apply_plan(L, plan)})
+            L = Ledger(store, L.slug)
+    except Exception:
+        store.archive_client(L.slug)
+        raise
     return L.client, results

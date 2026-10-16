@@ -1,0 +1,34 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Settings</h1></div>
+<form method="post" class="panel narrow">
+  {{ m.csrf() }}
+  <div class="field">
+    <label for="data_folder">Data folder</label>
+    <div class="input-row">
+      <input id="data_folder" name="data_folder" value="{{ folder }}" required
+             placeholder="C:\Users\you\Fortis Accounting Partners\Fortis Ledger - Documents">
+      <button type="button" class="btn hidden" data-browse-folder="data_folder">Browse…</button>
+    </div>
+    <p class="help">The SharePoint document library that holds the ledger, synced to this PC by OneDrive
+      (open the library in SharePoint and click <em>Sync</em>). Everyone in the firm points the app at their own
+      synced copy of the same library.</p>
+    {% if suggestions %}
+    <p class="help">Fortis Ledger folders found on this PC:</p>
+    <ul class="choices">
+      {% for s in suggestions %}<li><button type="button" class="btn link" data-fill="data_folder" data-value="{{ s }}">{{ s }}</button></li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  <label class="check{% if need_create %} attention{% endif %}"><input type="checkbox" name="create" value="yes"> Set up a new data folder here
+    <span class="help">(only the first time, for the firm's empty library)</span></label>
+  <div class="field">
+    <label for="user_name">Your name</label>
+    <input id="user_name" name="user_name" value="{{ user }}" required>
+    <p class="help">Recorded against every change you make, and shown to others while you are working on a client.</p>
+  </div>
+  <div class="actions"><button class="btn primary">Save</button>
+    {% if settings.configured %}<a class="btn" href="{{ url_for('ui.clients') }}">Cancel</a>{% endif %}</div>
+</form>
+{% endblock %}

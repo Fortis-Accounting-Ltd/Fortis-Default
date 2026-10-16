@@ -1,0 +1,41 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Trial balance{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Trial balance</h1><p class="muted">As at {{ upto|longdate }}</p></div>
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="actions">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="trial_balance"><input type="hidden" name="upto" value="{{ upto|dmy }}">
+    <input type="hidden" name="open" value="yes">
+    <button class="btn" name="format" value="pdf"{% if readonly %} disabled{% endif %}>PDF</button>
+    <button class="btn" name="format" value="xlsx"{% if readonly %} disabled{% endif %}>Excel</button>
+  </form>
+</div>
+<form method="get" class="toolbar">
+  {{ m.fy_field() }}
+  <label for="upto">As at</label><input id="upto" name="upto" value="{{ upto|dmy }}" class="date">
+  <button class="btn">Show</button>
+  {% if upto != fy_end %}<a class="btn link" href="{{ url_for('ui.trial_balance', slug=client.slug, fy=fy) }}">Year end</a>{% endif %}
+</form>
+{% if tb.difference %}<div class="flash error">The trial balance is out by {{ tb.difference|money0 }} - a journal posted outside the app? Check the change log.</div>{% endif %}
+<table class="grid">
+  <thead><tr><th>Code</th><th>Account</th><th>Type</th><th>Report code</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead>
+  <tbody>
+  {% for r in tb.rows %}
+  <tr><td class="nowrap"><a href="{{ url_for('ui.account_transactions', slug=client.slug, fy=fy, code=r.code, end=upto|dmy) }}">{{ r.code }}</a></td>
+    <td>{{ r.name }}</td><td class="nowrap">{{ r.type }}</td><td class="mono">{{ r.report_code }}</td>
+    <td class="num">{{ r.debit|money }}</td><td class="num">{{ r.credit|money }}</td></tr>
+  {% else %}
+  <tr><td colspan="6" class="empty">No balances yet - post a journal or import a trial balance.</td></tr>
+  {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr class="total"><td></td><td>Total</td><td></td><td></td><td class="num">{{ tb.total_debit|money0 }}</td><td class="num">{{ tb.total_credit|money0 }}</td></tr>
+    <tr><td></td><td>Net profit after tax for the period</td><td></td><td></td><td class="num" colspan="2">{{ tb.profit|money0 }}</td></tr>
+    {% if tb.appropriations %}
+    <tr><td></td><td>Dividends / distributions in the P&amp;L</td><td></td><td></td><td class="num" colspan="2">{{ tb.appropriations|money0 }}</td></tr>
+    <tr><td></td><td>Retained for the period</td><td></td><td></td><td class="num" colspan="2">{{ tb.retained|money0 }}</td></tr>
+    {% endif %}
+  </tfoot>
+</table>
+<p class="help">Profit and loss accounts start each year at nil; last year's profit is in retained earnings. Click a code for its transactions.</p>
+{% endblock %}

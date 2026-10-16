@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Check chart{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Check the chart of accounts</h1><p class="muted">{{ meta.file }}</p></div>
+  <div class="actions"><a class="btn link" href="{{ url_for('ui.import_start', slug=client.slug) }}">Start again</a></div>
+</div>
+<form method="post" class="panel">
+  {{ m.csrf() }}{{ m.fy_field() }}
+  <h2>{{ preview.added|length }} new account(s)</h2>
+  {% if preview.added_rows %}
+  <table class="grid compact"><thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Report code</th></tr></thead>
+    <tbody>{% for a in preview.added_rows %}<tr><td class="mono">{{ a.code }}</td><td>{{ a.name }}</td><td>{{ a.type }}</td><td class="mono">{{ a.report_code }}</td></tr>{% endfor %}</tbody></table>
+  {% endif %}
+  <h2>{{ preview.changed|length }} changed account(s)</h2>
+  {% if preview.changed %}
+  <table class="grid compact"><thead><tr><th>Code</th><th>Change</th></tr></thead>
+    <tbody>{% for c in preview.changed %}<tr><td class="mono">{{ c.code }}</td>
+      <td>{% for k, v in c.changes.items() %}<div>{{ k|replace("_", " ") }}: {{ v[0] or "(blank)" }} → <strong>{{ v[1] }}</strong></div>{% endfor %}</td></tr>{% endfor %}</tbody></table>
+  {% endif %}
+  {% if replace %}
+  <h2>{{ preview.removed|length }} account(s) to remove</h2>
+  {% if preview.removed_rows %}
+  <table class="grid compact"><thead><tr><th>Code</th><th>Name</th><th></th></tr></thead>
+    <tbody>{% for a in preview.removed_rows %}<tr><td class="mono">{{ a.code }}</td><td>{{ a.name }}</td>
+      <td>{% if a.code in preview.blocked %}<span class="err-text">has journals - cannot be removed</span>{% endif %}</td></tr>{% endfor %}</tbody></table>
+  {% endif %}
+  {% endif %}
+  <label class="check"><input type="checkbox" name="replace" value="yes"{% if replace %} checked{% endif %} data-autosubmit-op="check">
+    Also remove accounts that are not in the file (only unused ones)</label>
+  <div class="actions">
+    <button class="btn primary" name="op" value="apply"{% if preview.blocked %} disabled{% endif %}>Update the chart</button>
+    <button class="btn" name="op" value="check">Check again</button>
+  </div>
+</form>
+{% endblock %}

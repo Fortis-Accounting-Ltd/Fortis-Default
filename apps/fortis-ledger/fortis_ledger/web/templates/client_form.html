@@ -1,0 +1,128 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}{% if new %}New client{% else %}Client details{% endif %}{% endblock %}
+{% block content %}
+{% set t = form.get("type") or (client.type if client else "company") %}
+<div class="page-head"><h1>{% if new %}New client{% else %}Client details{% endif %}</h1></div>
+<form method="post" class="panel" action="{{ url_for('ui.client_new') if new else url_for('ui.client_details', slug=client.slug) }}">
+  {{ m.csrf() }}
+  <fieldset{% if readonly %} disabled{% endif %}>
+  <h2>Entity</h2>
+  <div class="form-grid">
+    <label for="name">Name</label>
+    <input id="name" name="name" value="{{ form.get('name', '') }}" required>
+
+    <label for="type">Entity type</label>
+    <div>
+      <select id="type" name="type" data-entity-type{% if has_journals %} disabled{% endif %}>
+        {% for k, v in ENTITY_LABELS.items() %}<option value="{{ k }}"{% if t == k %} selected{% endif %}>{{ v }}</option>{% endfor %}
+      </select>
+      {% if has_journals %}<input type="hidden" name="type" value="{{ t }}"><span class="help">Fixed once journals are posted.</span>
+      {% elif new %}<span class="help">The client starts with the firm's chart of accounts for this type.</span>{% endif %}
+    </div>
+
+    <label for="legal_name">Legal name</label>
+    <input id="legal_name" name="legal_name" value="{{ form.get('legal_name', '') }}" placeholder="If different, e.g. the trust's full name">
+
+    <label for="abn">ABN</label>
+    <input id="abn" name="abn" value="{{ form.get('abn', '') }}" inputmode="numeric">
+
+    <label for="fy_end_month">Financial year ends</label>
+    <div class="inline">
+      <input id="fy_end_day" name="fy_end_day" value="{{ form.get('fy_end_day', 30) }}" class="tiny" inputmode="numeric" aria-label="Day"{% if years %} readonly{% endif %}>
+      <select id="fy_end_month" name="fy_end_month"{% if years %} disabled{% endif %}>
+        {% for i in range(1, 13) %}<option value="{{ i }}"{% if (form.get('fy_end_month') or 6)|int == i %} selected{% endif %}>{{ ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][i] }}</option>{% endfor %}
+      </select>
+      {% if years %}<input type="hidden" name="fy_end_month" value="{{ form.get('fy_end_month') }}"><span class="help">Fixed once a year is started.</span>{% endif %}
+    </div>
+
+    {% if new %}
+    <label for="first_fy">First year in the ledger</label>
+    <div><input id="first_fy" name="first_fy" value="{{ form.get('first_fy', default_fy) }}" class="short" inputmode="numeric">
+      <span class="help">FY{{ default_fy }} = the year ending in {{ default_fy }}. Start with the earliest year you will load (e.g. the prior year, for comparatives).</span></div>
+    {% endif %}
+  </div>
+
+  <h2>People who sign</h2>
+  <div class="form-grid">
+    <label for="directors">Signatories</label>
+    <div><textarea id="directors" name="directors" rows="3">{{ form.get('directors', '') }}</textarea>
+      <span class="help">One per line: the directors (company), the trustee's directors or the individual trustees (trust), the partners (partnership) or the proprietor.</span></div>
+
+    <label for="trustee" data-show-for="trust">Trustee</label>
+    <input id="trustee" name="trustee" value="{{ form.get('trustee', '') }}" data-show-for="trust" placeholder="e.g. Smith Holdings Pty Ltd">
+
+    <label for="trustee_type" data-show-for="trust">Trustee type</label>
+    <select id="trustee_type" name="trustee_type" data-show-for="trust">
+      {% for k, v in [("", "Work it out from the name"), ("corporate", "Corporate trustee"), ("individual", "Individual trustee(s)")] %}
+      <option value="{{ k }}"{% if form.get('trustee_type', '') == k %} selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select>
+
+    <label for="business_name" data-show-for="sole_trader">Business name</label>
+    <input id="business_name" name="business_name" value="{{ form.get('business_name', '') }}" data-show-for="sole_trader">
+
+    <label for="proprietor" data-show-for="sole_trader">Proprietor</label>
+    <input id="proprietor" name="proprietor" value="{{ form.get('proprietor', '') }}" data-show-for="sole_trader">
+
+    <label for="compiled_by">Compiled by</label>
+    <div><input id="compiled_by" name="compiled_by" value="{{ form.get('compiled_by', '') }}">
+      <span class="help">Signatory on the compilation report - leave blank for the firm's default.</span></div>
+
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes" rows="2">{{ form.get('notes', '') }}</textarea>
+  </div>
+
+  {% if not new %}
+  <h2>Ledger</h2>
+  <div class="form-grid">
+    <label for="retained_earnings_account">Retained earnings account</label>
+    <div><select id="retained_earnings_account" name="retained_earnings_account">
+        <option value="">Work it out from the chart</option>
+        {% for a in equity_accounts %}<option value="{{ a.code }}"{% if form.get('retained_earnings_account') == a.code %} selected{% endif %}>{{ a.code }} {{ a.name }}</option>{% endfor %}
+      </select>
+      <span class="help">Last year's profit is carried here each year.</span></div>
+
+    <label for="rounding_account">Rounding account</label>
+    <select id="rounding_account" name="rounding_account">
+      <option value="">Work it out from the chart</option>
+      {% for a in rounding_accounts %}<option value="{{ a.code }}"{% if form.get('rounding_account') == a.code %} selected{% endif %}>{{ a.code }} {{ a.name }}</option>{% endfor %}
+    </select>
+  </div>
+
+  <h2>Financial Reports options</h2>
+  <div class="form-grid">
+    {% for key, label in [("decimals", "Amounts"), ("contents_page_numbers", "Page numbers on the Contents page"),
+                          ("cos_lines", "Cost of sales lines"), ("single_column", "Prior-year column"),
+                          ("keep_nil_accounts", "Accounts with nil balances")] %}
+    <label for="opt_{{ key }}">{{ label }}</label>
+    <select id="opt_{{ key }}" name="opt_{{ key }}">
+      {% for v, text in option_choices[key].items() %}<option value="{{ v }}"{% if form.get('opt_' ~ key, '') == v %} selected{% endif %}>{{ text }}</option>{% endfor %}
+    </select>
+    {% endfor %}
+    <label for="opt_cost_of_sales_label">Cost of sales heading</label>
+    <input id="opt_cost_of_sales_label" name="opt_cost_of_sales_label" value="{{ form.get('opt_cost_of_sales_label', '') }}" placeholder="Entity default (e.g. Cost of Goods Sold)">
+
+    <label for="options_json">Advanced options</label>
+    <div><textarea id="options_json" name="options_json" rows="5" class="mono">{{ form.get('options_json', '{}') }}</textarea>
+      <span class="help">Other report-engine options as JSON, e.g. <code>{"note_titles": {"receivables": "Trade and Other Receivables"}}</code>.
+        See the financial-report-builder skill's reference for the full list.</span></div>
+  </div>
+  {% endif %}
+  </fieldset>
+  <div class="actions">
+    {% if not readonly %}<button class="btn primary">{% if new %}Create client{% else %}Save{% endif %}</button>{% endif %}
+    <a class="btn" href="{{ url_for('ui.clients') if new else url_for('ui.overview', slug=client.slug) }}">Cancel</a>
+  </div>
+</form>
+
+{% if not new and not readonly %}
+<details class="panel danger-zone">
+  <summary>Archive this client</summary>
+  <p>Moves the client's folder to <code>archived</code> in the data folder - nothing is deleted, and it can be moved back.</p>
+  <form method="post" action="{{ url_for('ui.client_archive', slug=client.slug) }}" class="inline" data-confirm="Archive {{ client.name }}?">
+    {{ m.csrf() }}
+    <input name="confirm_name" placeholder="Type the client's name" aria-label="Type the client's name to confirm">
+    <button class="btn danger">Archive</button>
+  </form>
+</details>
+{% endif %}
+{% endblock %}

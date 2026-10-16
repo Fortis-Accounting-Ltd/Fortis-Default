@@ -1,0 +1,80 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Year end{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Year end <span class="muted">FY{{ fy }}</span></h1></div>
+
+<div class="cards two">
+  <div class="card">
+    <h2>1. Check the year</h2>
+    <ul class="checklist">
+      <li class="{{ 'ok' if not tb.difference else 'bad' }}">{% if tb.difference %}Trial balance is out by {{ tb.difference|money0 }}{% else %}Trial balance balances{% endif %}</li>
+      <li class="{{ 'ok' if not drafts else 'warn' }}">{% if drafts %}<a href="{{ url_for('ui.journals', slug=client.slug, fy=fy, status='draft') }}">{{ drafts|length }} draft journal(s)</a> - drafts are not in the balances{% else %}No draft journals{% endif %}</li>
+      <li class="ok">Net profit {{ tb.profit|money0 }}</li>
+    </ul>
+    <p><a href="{{ url_for('ui.reports_page', slug=client.slug, fy=fy) }}">Generate the Financial Reports</a> and check them before you roll forward.</p>
+  </div>
+
+  <div class="card">
+    <h2>2. Roll forward to FY{{ fy + 1 }}</h2>
+    <p class="help">Opens FY{{ fy + 1 }} ({{ next_range[0]|dmy }} – {{ next_range[1]|dmy }}). Balance sheet accounts carry forward and the profit goes
+      to retained earnings automatically. The closing journal below moves the year's movement accounts into the accounts that build up
+      over time{% if client.type == "company" %} (dividends into retained earnings){% elif client.type in ("trust", "partnership") %} (each {{ "beneficiary's" if client.type == "trust" else "partner's" }} drawings, contributions and share of profit into their opening balance){% elif client.type == "sole_trader" %} (drawings and funds introduced into retained earnings){% endif %}.</p>
+    {% if st.plan.moves %}
+    <table class="grid compact">
+      <thead><tr><th>From</th><th>To</th><th class="num">Balance moved</th></tr></thead>
+      <tbody>{% for frm, to, bal, why in st.plan.moves %}
+        <tr><td>{{ frm }} {{ names.get(frm, "") }}</td><td>{{ to }} {{ names.get(to, "(new account)") }}</td><td class="num">{{ bal|money0 }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% if st.plan.create %}<p class="help">New accounts: {% for a in st.plan.create %}{{ a.code }} {{ a.name }} ({{ a.report_code }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+    {% else %}
+    <p class="muted">Nothing to move - no closing journal is needed{% if client.type == "company" %} (no dividends this year){% endif %}.</p>
+    {% endif %}
+    {% if st.rolled_forward %}
+      <p>{% if st.journal %}Closing journal <a href="{{ url_for('ui.journal_view', slug=client.slug, jfy=fy + 1, number=st.journal) }}">{{ st.journal }}</a> is posted in FY{{ fy + 1 }}.{% else %}FY{{ fy + 1 }} is open.{% endif %}
+        {% if st.stale %}<span class="badge review">FY{{ fy }} has changed since - refresh it</span>{% elif st.needed and not st.journal %}<span class="badge review">Not posted yet</span>{% endif %}</p>
+    {% endif %}
+    {% if not readonly %}
+      {% if next_locked %}<p class="err-text">FY{{ fy + 1 }} is locked - unlock it to refresh the closing journal.</p>
+      {% elif not st.rolled_forward or st.stale or (st.needed and not st.journal) %}
+      <form method="post" action="{{ url_for('ui.year_close', slug=client.slug) }}" data-confirm="Roll FY{{ fy }} forward to FY{{ fy + 1 }}?">
+        {{ m.csrf() }}{{ m.fy_field() }}
+        <button class="btn primary">{% if st.rolled_forward %}Refresh the closing journal{% else %}Roll forward to FY{{ fy + 1 }}{% endif %}</button>
+      </form>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>3. Lock the year</h2>
+    {% if year_locked %}
+      <p>FY{{ fy }} is <strong>locked</strong>: no journal in it can be added, changed or voided.</p>
+      {% if not readonly %}
+      <form method="post" action="{{ url_for('ui.year_unlock', slug=client.slug) }}" data-confirm="Unlock FY{{ fy }}? Its reports may already be signed.">
+        {{ m.csrf() }}{{ m.fy_field() }}
+        <label for="unlock-reason">Reason for unlocking</label>
+        <input id="unlock-reason" name="reason" required placeholder="e.g. ATO amendment">
+        <button class="btn danger">Unlock</button>
+      </form>
+      {% endif %}
+    {% else %}
+      <p class="help">Lock the year once the Financial Reports are signed, like Xero's lock date. Unlocking needs a reason, and both are in the change log.</p>
+      {% if not readonly %}
+      <form method="post" action="{{ url_for('ui.year_lock', slug=client.slug) }}" data-confirm="Lock FY{{ fy }}?">
+        {{ m.csrf() }}{{ m.fy_field() }}
+        <label for="lock-reason">Note (optional)</label>
+        <input id="lock-reason" name="reason" placeholder="e.g. reports signed 15/10/2026">
+        <button class="btn">Lock FY{{ fy }}</button>
+      </form>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {% if state.history %}
+  <div class="card">
+    <h2>Lock history</h2>
+    <table class="grid compact"><tbody>{% for h in state.history|reverse %}
+      <tr><td class="nowrap">{{ h.at|when }}</td><td>{{ h.action|capitalize }}</td><td>{{ h.by }}</td><td>{{ h.reason }}</td></tr>{% endfor %}</tbody></table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
