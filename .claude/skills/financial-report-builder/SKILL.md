@@ -1,6 +1,16 @@
 ---
 name: financial-report-builder
-description: Builds the Fortis "Financial Reports" pack (special purpose financial statements) as a PDF for a company, trust, partnership or sole trader WITHOUT a Xero subscription, straight from the client's year-end workpaper in FYI. Works like a Xero ledger - every workpaper P&L and Balance Sheet line is posted, by its nature, to an account in the firm's chart of accounts for that entity type (the four Fortis Xero charts are bundled), and the account's Xero report code decides where it prints - so the output matches the firm's Xero report templates (P&L / Income Statement, Balance Sheet, Movements in Equity, Trust Income Distribution, Partner / Beneficiary Accounts, Notes grouped by account type on the Balance Sheet side only, Rental and Depreciation Schedules, Directors / Trustee / Partner Declaration, Compilation Report). Report codes can be changed on request, per client or firm-wide. Files the finished PDF to FYI (Final Reports & Returns) only after confirmation. ALWAYS trigger for "prepare the financial statements / financial report for [client]", "create the financials from the workpaper", "Xero-style financial report", "special purpose financial statements", "SPFS", "compile the accounts", "financial report pack", "do the financials without Xero", "change the report code for [account]", or when a workpaper is uploaded with a request for financial statements. Do NOT trigger for SMSFs (smsf-audit-pack), tax return review (company-tax-reviewer / trust-tax-reviewer), or building the workpaper itself (company-workpaper-creator).
+description: >-
+  Builds the Fortis "Financial Reports" PDF (special purpose financial statements) for a company, trust,
+  partnership or sole trader without a Xero subscription, from the year-end workpaper in FYI. Works like a Xero
+  ledger: each workpaper P&L and Balance Sheet line is posted by nature to the firm's chart of accounts for the
+  entity type, and the account's Xero report code decides where it prints, so the pack matches the firm's Xero
+  templates (P&L, Balance Sheet, equity, distribution and partner / beneficiary statements, Balance-Sheet-only
+  notes, declaration, compilation report). Report codes can be changed per client or firm-wide on request. Files
+  to FYI only after confirmation. ALWAYS trigger for "prepare the financial statements / financial report for
+  [client]", "financials from the workpaper", "SPFS", "compile the accounts", "do the financials without Xero",
+  "change the report code for [account]", or a workpaper uploaded for financial statements. Not for SMSFs, tax
+  return review or building the workpaper.
 compatibility: >-
   Needs python3 with reportlab and openpyxl (pip install reportlab openpyxl).
   Uses the FYI MCP to find the client, download the workpaper and last year's
