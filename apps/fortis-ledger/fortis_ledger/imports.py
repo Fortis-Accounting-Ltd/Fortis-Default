@@ -56,8 +56,11 @@ def read_table(path: str | Path, sheet: str | None = None) -> list[list]:
     if p.suffix.lower() in (".xlsx", ".xlsm", ".xltx", ".xltm"):
         import openpyxl
         wb = openpyxl.load_workbook(p, data_only=True, read_only=True)
-        ws = wb[sheet] if sheet and sheet in wb.sheetnames else wb[wb.sheetnames[0]]
-        return [list(r) for r in ws.iter_rows(values_only=True)]
+        try:
+            ws = wb[sheet] if sheet and sheet in wb.sheetnames else wb[wb.sheetnames[0]]
+            return [list(r) for r in ws.iter_rows(values_only=True)]
+        finally:
+            wb.close()          # read-only workbooks keep the file open (Windows could not delete it)
     raw = p.read_bytes()
     for enc in ("utf-8-sig", "cp1252", "latin-1"):
         try:
@@ -645,7 +648,9 @@ def plan_workpaper(ledger: Ledger, path: str | Path, fy: int, pl_sheet: str = "P
                    bs_sheet: str = "Balance Sheet,BS") -> Plan:
     """Read a Fortis workpaper with the skill's reader and classify each line by nature (report code)."""
     import openpyxl
-    names = openpyxl.load_workbook(path, read_only=True).sheetnames
+    wb = openpyxl.load_workbook(path, read_only=True)
+    names = wb.sheetnames
+    wb.close()
     pl_names = [x.strip() for x in pl_sheet.split(",")]
     stop_at = None
     if not any(n in names for n in pl_names) and "Business" in names:

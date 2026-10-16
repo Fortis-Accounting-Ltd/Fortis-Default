@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import calendar
 import datetime as dt
+import gc
 import json
 import os
 import re
@@ -816,6 +817,7 @@ def _save_meta(pid: str, meta: dict) -> None:
 
 
 def _finish(pid: str) -> None:
+    gc.collect()        # let go of any workbook still holding the upload open (Windows cannot delete open files)
     shutil.rmtree(work_dir() / pid, ignore_errors=True)
 
 
