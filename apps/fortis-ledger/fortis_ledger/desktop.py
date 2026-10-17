@@ -17,14 +17,14 @@ import sys
 import threading
 import time
 import webbrowser
+from pathlib import Path
 
 from werkzeug.serving import make_server
 
 from . import APP_NAME, __version__
 from . import shortcut
 from .settings import Settings, config_dir
-from .store import FolderStore
-from .web import create_app
+from .web import create_app, release_locks
 
 START_PAGES = {"clients": "/", "xero": "/xero", "settings": "/setup"}
 
@@ -59,9 +59,19 @@ def setup_logging():
     return d / "fortis-ledger.log"
 
 
+def installed_by_setup() -> bool:
+    """Whether the Windows installer put this copy here - it leaves install.ini next to the program."""
+    return (Path(sys.executable).resolve().parent / "install.ini").is_file()
+
+
 def first_run_icon(settings: Settings) -> None:
-    """The installed app puts its icon on the desktop the first time it runs on a PC (once only)."""
+    """
+    A copy of the app that was simply unzipped puts its icon on the desktop the first time it runs on a PC
+    (once only).  An installed copy leaves that to the installer, which makes the icons the person ticked.
+    """
     if not (getattr(sys, "frozen", False) and shortcut.available()) or "app" in settings.icons_made:
+        return
+    if installed_by_setup():
         return
     try:
         path = shortcut.create("app")
@@ -106,17 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     threading.Thread(target=server.serve_forever, name="fortis-ledger-server", daemon=True).start()
     logging.info("%s %s listening on 127.0.0.1:%s (log %s)", APP_NAME, __version__, server.server_port, log_path)
 
-    def release_locks():
-        if settings.data_folder and settings.user_name:
-            st = FolderStore(settings.data_folder, user=settings.user_name)
-            for slug in list(app.config["OPEN_CLIENTS"]):
-                try:
-                    st.release_lock(slug)
-                except Exception:
-                    logging.exception("could not release the edit lock on %s", slug)
-        app.config["OPEN_CLIENTS"].clear()
-
-    atexit.register(release_locks)
+    atexit.register(release_locks, app)
     first_run_icon(settings)
 
     if not args.browser and not args.no_open:
@@ -135,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
                                                min_size=(980, 640), text_select=True)
                 api._window = window
                 webview.start()                    # returns when the window is closed
-                release_locks()
+                release_locks(app)
                 server.shutdown()
                 return 0
             except Exception:
@@ -154,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
                 break
     except KeyboardInterrupt:
         pass
-    release_locks()
+    release_locks(app)
     server.shutdown()
     return 0
 

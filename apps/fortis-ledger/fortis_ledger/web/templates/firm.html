@@ -71,7 +71,7 @@
 
   <div class="card">
     <div class="feature"><span class="feature-icon">{{ m.icon("desktop") }}</span>
-      <div><h2>Desktop icons</h2><p class="help">Shortcuts on this PC's desktop. The app also puts its own icon there the first time it runs.</p></div></div>
+      <div><h2>Desktop icons</h2><p class="help">Shortcuts on this PC's desktop. The installer puts the ones you ticked there - use these buttons to add one again if it was deleted.</p></div></div>
     {% if icons_possible %}
     <div class="actions">
       <form method="post" action="{{ url_for('ui.desktop_icon') }}" class="inline-form">{{ m.csrf() }}<input type="hidden" name="kind" value="app"><button class="btn">{{ m.icon("desktop") }} Fortis Ledger icon</button></form>

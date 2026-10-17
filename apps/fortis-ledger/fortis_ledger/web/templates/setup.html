@@ -40,7 +40,7 @@
   {% if icons_possible %}
   <div class="card">
     <div class="feature"><span class="feature-icon">{{ m.icon("desktop") }}</span>
-      <div><strong>Desktop icons</strong><p class="help">Put shortcuts on this PC's desktop.</p></div></div>
+      <div><strong>Desktop icons</strong><p class="help">Put a shortcut on this PC's desktop again, e.g. after one was deleted.</p></div></div>
     <div class="actions">
       <form method="post" action="{{ url_for('ui.desktop_icon') }}" class="inline-form">{{ m.csrf() }}<input type="hidden" name="kind" value="app"><button class="btn small">Fortis Ledger</button></form>
       <form method="post" action="{{ url_for('ui.desktop_icon') }}" class="inline-form">{{ m.csrf() }}<input type="hidden" name="kind" value="xero"><button class="btn small">Connect to Xero</button></form>

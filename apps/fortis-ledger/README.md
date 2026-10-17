@@ -24,7 +24,7 @@ changes the skill. The two are separate from now on: a change to one does not re
 | **Edit lock** | One person edits a client at a time; others can view it read only. The lock frees itself after 15 minutes if a PC goes away, and someone can take it over. |
 | **Move a client off Xero** | **Connect to Xero** signs in to Xero from the app and brings a client's chart and year-end trial balances straight across (read only), then disconnects it. Or give the app the client's Xero chart export and trial balance exports. Either way, every year's closing balances match Xero. |
 | **Office sign-in** | Optional: everyone signs in with their Fortis Microsoft 365 email. The change log and the edit lock then show the verified email instead of a typed name. |
-| **Desktop icons** | The installed app puts a *Fortis Ledger* icon on the desktop the first time it runs. Settings can add a second icon, *Fortis Ledger - Connect to Xero*, that opens straight at Connect to Xero. |
+| **Installer** | One file, `Fortis-Ledger-Setup-<version>.exe`, to share with staff. It installs without administrator rights and puts a *Fortis Ledger* icon on the desktop, plus a *Fortis Ledger - Connect to Xero* icon that opens straight at Connect to Xero. |
 
 ## Setting up the SharePoint library (once, for the firm)
 
@@ -60,17 +60,45 @@ in an allowed domain. Then the change log, the edit lock and the Overview show t
 saved on the PC, only the last email used, so it can be offered next time. Each time the app opens, it signs in
 again. **Firm settings > Stop requiring sign-in** turns it off again for everyone.
 
-## Running it
+## Installing it
 
-Download **Fortis-Ledger-windows** from the latest run of the *Fortis Ledger* workflow (GitHub >
-Actions). Unzip the `Fortis Ledger` folder anywhere, e.g. `C:\Program Files\Fortis Ledger` or your
-own Apps folder, then run `Fortis Ledger.exe`. It opens in its own window, which uses the Edge
+The installer is one file, `Fortis-Ledger-Setup-<version>.exe`. Share it with staff, for example from
+SharePoint or Teams. Each of the *Fortis Ledger* workflow's runs on GitHub (Actions) also keeps a copy,
+as **Fortis-Ledger-Setup**.
+
+Each person installs it like this:
+
+1. Double-click `Fortis-Ledger-Setup-<version>.exe`.
+2. The installer is not code-signed, so Windows may show *Windows protected your PC*. Click **More info**,
+   then **Run anyway**.
+3. Click **Next**, choose the desktop icons (*Fortis Ledger*, and *Fortis Ledger - Connect to Xero*), and
+   click **Install**.
+4. Leave *Open Fortis Ledger now* ticked and click **Finish**. The first time, the app asks for your name
+   and the data folder (the synced SharePoint library).
+
+It installs for the person running it, in `%LOCALAPPDATA%\Programs\Fortis Ledger`, so no administrator
+rights are needed. It adds a Start menu entry. The program opens in its own window, which uses the Edge
 WebView2 runtime that comes with Windows 10 and 11.
 
-The first time it runs on a PC, it puts a **Fortis Ledger** icon on the desktop, including a desktop that
-OneDrive has moved. **Settings > Desktop icons** adds the icon again if it was deleted, or adds a
-**Fortis Ledger - Connect to Xero** icon. If you move the app's folder, make the icons again from Settings.
-To open the app at a particular screen, use `"Fortis Ledger.exe" --start xero` or `--start settings`.
+- **Updating:** run the newer `Fortis-Ledger-Setup` file. It replaces the old version, and everything else
+  is kept: the ledger, your settings and your icons.
+- **Uninstalling:** go to Settings > Apps > Fortis Ledger > Uninstall. This removes the program and its
+  icons only. The ledger in SharePoint and your settings stay.
+- **For IT:**
+  - To install for everyone on a PC, run the setup from an administrator prompt with `/ALLUSERS`.
+  - To install silently, e.g. through Intune, use
+    `Fortis-Ledger-Setup-<version>.exe /VERYSILENT /SUPPRESSMSGBOXES /TASKS=desktopicon,xeroicon`.
+    Leave out either task name to skip that icon.
+
+**Settings > Desktop icons** adds an icon again if one was deleted. To open the app at a particular screen,
+use `"Fortis Ledger.exe" --start xero` or `--start settings`.
+
+## Running it without installing
+
+The workflow's **Fortis-Ledger-windows** download is the same program as a plain folder. Unzip the
+`Fortis Ledger` folder anywhere and run `Fortis Ledger.exe`. The first time it runs on a PC, it puts a
+**Fortis Ledger** icon on the desktop, including a desktop that OneDrive has moved. If you move the folder,
+make the icons again from Settings.
 
 To check a copy end to end, run `"Fortis Ledger.exe" --self-test`. The exit code is 0 when it
 passes, and the details are written to `%APPDATA%\Fortis Ledger\self-test.txt`.
@@ -84,7 +112,13 @@ python -m fortis_ledger            # desktop window (on Windows), or the browser
 python -m fortis_ledger --browser  # in the default web browser
 ```
 
-To build the Windows app yourself, run `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1`.
+To build the Windows app and its installer yourself, install [Inno Setup](https://jrsoftware.org/isinfo.php)
+6.7 or later, then run `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1`. The installer
+is made by `packaging\installer.iss`.
+
+`packaging\test_installer.ps1 dist\Fortis-Ledger-Setup-<version>.exe` checks the installer the way staff
+will use it: it installs Fortis Ledger, checks the icons, self-tests the installed copy, installs again
+over the top, and uninstalls it. CI runs it on every build.
 
 ## Moving a client off Xero
 

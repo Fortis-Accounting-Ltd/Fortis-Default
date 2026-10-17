@@ -9,11 +9,11 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from fortis_ledger import shortcut
+from fortis_ledger import __version__, desktop, shortcut
 from fortis_ledger.ledger import Ledger
 from fortis_ledger.settings import Settings
 from fortis_ledger.store import FolderStore
-from fortis_ledger.web import create_app
+from fortis_ledger.web import create_app, release_locks
 from fortis_ledger.xero_connect import Endpoints, has_balances, year_ends
 
 from fake_oauth import MS_CLIENT, TENANT, XERO_CLIENT, FakeProvider, follow, free_port
@@ -228,6 +228,13 @@ def test_office_sign_in_is_tested_then_required(app, provider, lib):
     slug = r.headers["Location"].split("/c/")[1].split("/")[0]
     assert FolderStore(lib).read_audit(slug)[-1]["user"] == "alex.citizen@fortisap.com.au"   # the change log has the email
 
+    # the edit lock is held as the email too - and closing the app hands it back, so others can edit at once
+    other.get(f"/c/{slug}/")
+    lock = FolderStore(lib).client_dir(slug) / "lock.json"
+    assert '"alex.citizen@fortisap.com.au"' in lock.read_text(encoding="utf-8")
+    release_locks(app)
+    assert not lock.exists() and not app.config["OPEN_CLIENTS"]
+
     # after signing in the app only goes on to its own pages
     for bad in ("//evil.example/x", "/\\evil.example/x", "/\t/evil.example", "https://evil.example/"):
         assert urlsplit(other.get("/signin", query_string={"next": bad}).headers["Location"]).path == "/"
@@ -311,3 +318,47 @@ def test_shortcut_needs_windows(monkeypatch):
     monkeypatch.setattr(shortcut, "available", lambda: False)
     with pytest.raises(shortcut.ShortcutError):
         shortcut.create("app")
+
+
+def test_first_run_icon_is_left_to_the_installer(monkeypatch, tmp_path):
+    monkeypatch.setenv("FORTIS_LEDGER_HOME", str(tmp_path / "config"))
+    made = []
+    monkeypatch.setattr(shortcut, "available", lambda: True)
+    monkeypatch.setattr(shortcut, "create", lambda kind="app": made.append(kind) or f"{kind}.lnk")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    exe = tmp_path / "Fortis Ledger" / "Fortis Ledger.exe"
+    exe.parent.mkdir()
+    exe.write_bytes(b"")
+    monkeypatch.setattr(sys, "executable", str(exe))
+    settings = Settings()
+
+    # installed with the setup program: it made the icons the person ticked, so the app adds none
+    (exe.parent / "install.ini").write_text("[Fortis Ledger]\ninstalled_by=setup\n", encoding="utf-8")
+    desktop.first_run_icon(settings)
+    assert made == [] and settings.icons_made == []
+
+    # simply unzipped: the app puts its own icon on the desktop, once
+    (exe.parent / "install.ini").unlink()
+    desktop.first_run_icon(settings)
+    desktop.first_run_icon(settings)
+    assert made == ["app"] and settings.icons_made == ["app"]
+
+
+def test_installer_script_matches_the_app():
+    packaging = Path(__file__).resolve().parents[1] / "packaging"
+    iss = (packaging / "installer.iss").read_text(encoding="utf-8")
+    # the program PyInstaller makes, and the icons, are the ones the app's own Settings buttons make
+    assert '#define AppName "Fortis Ledger"' in iss and '#define AppExe "Fortis Ledger.exe"' in iss
+    assert 'name="Fortis Ledger"' in (packaging / "fortis-ledger.spec").read_text(encoding="utf-8")
+    assert shortcut.ICONS["app"]["name"] == "Fortis Ledger"
+    assert shortcut.ICONS["xero"]["name"] == "Fortis Ledger - Connect to Xero"
+    xero_args = " ".join(shortcut.ICONS["xero"]["args"])
+    assert f'Name: "{{autodesktop}}\\{{#AppName}} - Connect to Xero"; Filename: "{{app}}\\{{#AppExe}}"; Parameters: "{xero_args}"' in iss
+    # the marker that tells the app the installer looks after the icons, and the pictures, are all there
+    assert 'Source: "install.ini"' in iss and (packaging / "install.ini").is_file()
+    for files in re.findall(r"^Wizard(?:Small)?ImageFile=(.+)$", iss, re.M):
+        for f in files.split(","):
+            assert (packaging / f.strip()).is_file(), f
+    assert (packaging / "fortis-ledger.ico").is_file()
+    # Windows' version resource takes numbers only
+    assert re.fullmatch(r"\d+(\.\d+){0,3}", __version__)

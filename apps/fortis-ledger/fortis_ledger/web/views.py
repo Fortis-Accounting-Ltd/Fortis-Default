@@ -32,7 +32,7 @@ from ..oauth import SignInError
 from ..settings import suggest_folders
 from ..store import FolderStore, LockedError, StoreError
 from ..xero_connect import DEFAULT_PORT as XERO_PORT, SCOPES as XERO_SCOPES, XeroConfig, XeroSession, has_balances, year_ends
-from . import ENTITY_LABELS
+from . import ENTITY_LABELS, release_locks
 
 bp = Blueprint("ui", __name__)
 
@@ -224,12 +224,12 @@ def _context():
                                     (info["mine"] and time.time() - float(info.get("heartbeat", 0)) > HEARTBEAT_WRITE_SECONDS)):
         ok, info = st.acquire_lock(g.slug)
         if ok:
-            cfg("OPEN_CLIENTS").add(g.slug)
+            cfg("OPEN_CLIENTS")[g.slug] = st.user
     elif info and info["mine"]:
-        cfg("OPEN_CLIENTS").add(g.slug)
+        cfg("OPEN_CLIENTS")[g.slug] = st.user
     if request.method == "POST" and request.endpoint not in LOCK_ENDPOINTS:
         st.require_lock(g.slug)
-        cfg("OPEN_CLIENTS").add(g.slug)
+        cfg("OPEN_CLIENTS")[g.slug] = st.user
         info = st.lock_info(g.slug)
     g.lock = info
     g.readonly = bool(info and not info["mine"] and not info["stale"])
@@ -340,9 +340,7 @@ def setup():
 @bp.route("/")
 def clients():
     st = store()
-    for slug in list(cfg("OPEN_CLIENTS")):     # leaving a client hands its edit lock back
-        st.release_lock(slug)
-        cfg("OPEN_CLIENTS").discard(slug)
+    release_locks(current_app)                 # leaving a client hands its edit lock back
     rows = []
     for c in st.list_clients():
         info = st.lock_info(c.slug)
@@ -386,11 +384,7 @@ def alive():
 
 @bp.route("/quit", methods=["POST"], endpoint="quit")
 def quit_app():
-    st = store() if settings().configured else None
-    for slug in list(cfg("OPEN_CLIENTS")):
-        if st:
-            st.release_lock(slug)
-        cfg("OPEN_CLIENTS").discard(slug)
+    release_locks(current_app)
     fn = cfg("SHUTDOWN")
     if fn:
         threading.Timer(0.3, fn).start()
@@ -553,7 +547,7 @@ def client_archive(slug):
         flash("Type the client's name exactly to archive it.", "error")
         return redirect(url_for("ui.client_details", slug=slug))
     dest = store().archive_client(slug)
-    cfg("OPEN_CLIENTS").discard(slug)
+    cfg("OPEN_CLIENTS").pop(slug, None)
     flash(f"{L.client.name} archived - its files are in {dest}.", "ok")
     return redirect(url_for("ui.clients"))
 
@@ -565,7 +559,7 @@ def lock_heartbeat(slug):
     if not info or info["mine"] or info["stale"]:
         ok, info = st.acquire_lock(slug)
         if ok:
-            cfg("OPEN_CLIENTS").add(slug)
+            cfg("OPEN_CLIENTS")[slug] = st.user
     other = bool(info and not info["mine"])
     return jsonify({"readonly": other, "user": info.get("user", "") if other else "",
                     "machine": info.get("machine", "") if other else ""})
@@ -574,7 +568,7 @@ def lock_heartbeat(slug):
 @bp.route("/c/<slug>/lock/take", methods=["POST"])
 def lock_take(slug):
     store().acquire_lock(slug, force=True)
-    cfg("OPEN_CLIENTS").add(slug)
+    cfg("OPEN_CLIENTS")[slug] = store().user
     flash("You are now editing this client. The other person can no longer save changes to it.", "warn")
     return redirect(client_home())
 
@@ -582,7 +576,7 @@ def lock_take(slug):
 @bp.route("/c/<slug>/lock/release", methods=["POST"])
 def lock_release(slug):
     store().release_lock(slug)
-    cfg("OPEN_CLIENTS").discard(slug)
+    cfg("OPEN_CLIENTS").pop(slug, None)
     return redirect(url_for("ui.clients"))
 
 
@@ -1443,10 +1437,7 @@ def signin_cancel():
 
 @bp.route("/signout", methods=["POST"])
 def signout():
-    st = store()
-    for slug in list(cfg("OPEN_CLIENTS")):        # the edit locks belong to the account signing out
-        st.release_lock(slug)
-        cfg("OPEN_CLIENTS").discard(slug)
+    release_locks(current_app)                    # the edit locks belong to the account signing out
     session.pop("ms_user", None)
     session.pop("ms_tested", None)
     flash("Signed out.", "ok")

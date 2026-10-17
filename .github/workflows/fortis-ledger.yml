@@ -52,6 +52,21 @@ jobs:
           $p = Start-Process -FilePath "dist\Fortis Ledger\Fortis Ledger.exe" -ArgumentList "--self-test" -Wait -PassThru
           Get-Content "$env:APPDATA\Fortis Ledger\self-test.txt"
           if ($p.ExitCode -ne 0) { throw "self-test failed (exit $($p.ExitCode))" }
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+          ./packaging/build_installer.ps1
+      - name: Install it as staff would, self-test, upgrade and uninstall it
+        shell: pwsh
+        run: ./packaging/test_installer.ps1 (Get-Item "dist/Fortis-Ledger-Setup-*.exe").FullName
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fortis-Ledger-Setup
+          path: apps/fortis-ledger/dist/Fortis-Ledger-Setup-*.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
       - uses: actions/upload-artifact@v4
         with:
           name: Fortis-Ledger-windows

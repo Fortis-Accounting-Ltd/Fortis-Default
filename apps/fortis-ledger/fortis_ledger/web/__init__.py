@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hmac
+import logging
 import secrets
 import tempfile
 import time
@@ -22,10 +23,27 @@ from .. import APP_NAME, __version__
 from ..money import fmt
 from ..msauth import AUTHORITY
 from ..settings import Settings
+from ..store import FolderStore
 from ..xero_connect import Endpoints
 
 ENTITY_LABELS = {"company": "Company", "trust": "Trust", "partnership": "Partnership", "sole_trader": "Sole trader"}
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def release_locks(app: Flask) -> None:
+    """
+    Hand back every edit lock this copy of the app holds - each as the account that took it (the typed
+    name, or the office email when signed in), so others can edit those clients straight away.
+    """
+    folder = app.config["SETTINGS"].data_folder
+    held = app.config["OPEN_CLIENTS"]
+    for slug, user in list(held.items()):
+        if folder:
+            try:
+                FolderStore(folder, user=user).release_lock(slug)
+            except Exception:
+                logging.exception("could not release the edit lock on %s", slug)
+        held.pop(slug, None)
 
 
 def create_app(settings: Settings | None = None, token: str | None = None,
@@ -40,7 +58,7 @@ def create_app(settings: Settings | None = None, token: str | None = None,
         SETTINGS=settings or Settings.load(),
         APP_TOKEN=token or secrets.token_urlsafe(24),
         WORK_DIR=Path(work_dir or tempfile.mkdtemp(prefix="fortis-ledger-")),
-        OPEN_CLIENTS=set(),      # clients whose edit lock this process holds
+        OPEN_CLIENTS={},         # clients whose edit lock this process holds -> the account that took it
         RESULTS={},              # results shown after a redirect (report checks, migrations)
         SHUTDOWN=None,           # set by the launcher in browser mode
         DESKTOP=False,           # True inside the pywebview window
