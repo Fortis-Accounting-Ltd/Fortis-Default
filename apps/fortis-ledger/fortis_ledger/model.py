@@ -9,7 +9,7 @@ from decimal import Decimal
 from .money import ZERO, as_str, to_dec
 
 ENTITY_TYPES = ("company", "trust", "partnership", "sole_trader")
-JOURNAL_KINDS = ("manual", "import", "opening", "close", "reversal")
+JOURNAL_KINDS = ("manual", "import", "opening", "close", "reversal", "bank")
 STATUSES = ("draft", "posted", "void")
 
 
@@ -46,6 +46,9 @@ class Line:
     debit: Decimal = ZERO
     credit: Decimal = ZERO
     description: str = ""
+    tax: str = ""                 # tax rate, e.g. "GST on Expenses" (clients registered for GST)
+    gst: Decimal = ZERO           # the GST on this line - posted on an automatic line to the GST account
+    auto: bool = False            # that automatic GST line
 
     @property
     def amount(self) -> Decimal:
@@ -53,13 +56,21 @@ class Line:
         return self.debit - self.credit
 
     def to_dict(self) -> dict:
-        return {"account": self.account, "description": self.description,
-                "debit": as_str(self.debit), "credit": as_str(self.credit)}
+        d = {"account": self.account, "description": self.description,
+             "debit": as_str(self.debit), "credit": as_str(self.credit)}
+        if self.tax:
+            d["tax"] = self.tax
+        if self.gst:
+            d["gst"] = as_str(self.gst)
+        if self.auto:
+            d["auto"] = True
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "Line":
         return cls(account=str(d.get("account", "")).strip(), description=d.get("description", "") or "",
-                   debit=to_dec(d.get("debit")), credit=to_dec(d.get("credit")))
+                   debit=to_dec(d.get("debit")), credit=to_dec(d.get("credit")), tax=d.get("tax", "") or "",
+                   gst=to_dec(d.get("gst")), auto=bool(d.get("auto")))
 
 
 @dataclass
@@ -78,6 +89,7 @@ class Journal:
     voided: dict = field(default_factory=dict)
     reverses: str = ""
     reversed_by: str = ""
+    amounts: str = ""             # taxed lines were entered GST "inclusive" (the default) or "exclusive"
 
     @property
     def total_debit(self) -> Decimal:
@@ -106,6 +118,8 @@ class Journal:
             d["reverses"] = self.reverses
         if self.reversed_by:
             d["reversed_by"] = self.reversed_by
+        if self.amounts:
+            d["amounts"] = self.amounts
         return d
 
     @classmethod
@@ -115,7 +129,8 @@ class Journal:
                    status=d.get("status", "draft"), reference=d.get("reference", "") or "",
                    uid=d.get("uid") or uuid.uuid4().hex[:12], source=d.get("source") or {},
                    created=d.get("created") or {}, updated=d.get("updated") or {}, voided=d.get("voided") or {},
-                   reverses=d.get("reverses", "") or "", reversed_by=d.get("reversed_by", "") or "")
+                   reverses=d.get("reverses", "") or "", reversed_by=d.get("reversed_by", "") or "",
+                   amounts=d.get("amounts", "") or "")
 
 
 @dataclass
@@ -136,6 +151,7 @@ class Client:
     compiled_by: str = ""
     retained_earnings_account: str = ""
     rounding_account: str = ""
+    gst_registered: bool = False         # cash coding splits the GST out of bank lines
     options: dict = field(default_factory=dict)
     labels: dict = field(default_factory=dict)
     notes: str = ""

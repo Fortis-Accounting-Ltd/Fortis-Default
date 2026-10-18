@@ -21,7 +21,7 @@ def test_self_test_passes(tmp_path):
                        capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, r.stdout + r.stderr
     report = (tmp_path / "config" / "self-test.txt").read_text(encoding="utf-8")
-    assert report.strip().endswith("PASSED") and report.count(": ok") == 5 and "\nscreens: ok" in report
+    assert report.strip().endswith("PASSED") and report.count(": ok") == 6 and "\nbank: ok" in report and "\nscreens: ok" in report
 
 
 def test_server_answers_only_with_the_token(tmp_path):

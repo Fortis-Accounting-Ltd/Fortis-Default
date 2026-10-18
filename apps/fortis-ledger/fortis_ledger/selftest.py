@@ -1,8 +1,9 @@
 """
 End-to-end check of an installed copy - `Fortis Ledger.exe --self-test`.  For each entity type it
 sets up a client in a temporary folder, posts a journal, rolls the year forward and produces the
-Financial Reports and a Trial Balance.  Then it opens the main screens, so a template or icon missing
-from the package shows up here.  Exit code 0 means everything worked; the details go to self-test.txt
+Financial Reports and a Trial Balance.  It imports and cash codes a bank statement (with GST) and
+produces the Profit and Loss, Balance Sheet and GST report.  Then it opens the main screens, so a
+template or icon missing from the package shows up here.  Exit code 0 means everything worked; the details go to self-test.txt
 in the settings folder (a windowed build has no console).
 """
 from __future__ import annotations
@@ -58,6 +59,13 @@ def run() -> int:
                 ok = False
                 out.append(f"{etype}: FAILED\n{traceback.format_exc()}")
         try:
+            good, detail = _bank(st, Path(d))
+            ok &= good
+            out.append(f"bank: {'ok' if good else 'FAILED'} - {detail}")
+        except Exception:
+            ok = False
+            out.append(f"bank: FAILED\n{traceback.format_exc()}")
+        try:
             bad = _screens(Path(d))
             ok &= not bad
             out.append("screens: " + (f"FAILED - {', '.join(bad)}" if bad else "ok"))
@@ -78,6 +86,48 @@ def run() -> int:
     return 0 if ok else 1
 
 
+STATEMENT = """Date,Amount,Description,Balance
+15/06/2026,2200.00,DIRECT CREDIT ACME PTY LTD INV 1001,"2,200.00"
+16/06/2026,-110.00,OFFICEWORKS 0123 SYDNEY AU,"2,090.00"
+"""
+
+
+def _bank(st, d: Path) -> tuple[bool, str]:
+    """A statement into a GST-registered company: read, imported, cash coded; then the statements and GST report."""
+    from . import bank, reports, statements
+    from .imports import read_table
+    from .ledger import Ledger
+
+    c = st.create_client("Self Test Bank", "company", gst_registered=True)
+    L = Ledger(st, c.slug)
+    L.ensure_year(2026)
+    L = Ledger(st, c.slug)
+    p = d / "statement.csv"
+    p.write_text(STATEMENT, encoding="utf-8")
+    rows = read_table(p)
+    layout = bank.detect_layout(rows)
+    lines, problems = bank.read_lines(rows, layout)
+    acct = next(a.code for a in L.chart.usable() if bank.is_bank_account(a))
+    sales = next(a.code for a in L.chart.usable() if a.report_code.startswith("REV.TRA"))
+    cost = next(a.code for a in L.chart.usable() if a.report_code.startswith("EXP") and not L.is_appropriation(a.code))
+    bank.import_lines(L, acct, lines, p.name, layout)
+    ids = [ln["id"] for ln in bank.BankFeed(st, c.slug, acct).ordered()]
+    res = bank.reconcile(L, acct, [bank.Coding(ids[0], sales, "GST on Income"), bank.Coding(ids[1], cost, "GST on Expenses")])
+    L = Ledger(st, c.slug)
+    gst = statements.gst_report(L, *L.fy_range(2026))
+    bs = statements.balance_sheet(L, L.fy_range(2026)[1])
+    for name, make in (("pl.pdf", lambda f: reports.profit_and_loss(L, f, *L.fy_range(2026))),
+                       ("bs.xlsx", lambda f: reports.balance_sheet(L, f, L.fy_range(2026)[1], as_excel=True)),
+                       ("gst.pdf", lambda f: reports.gst_report(L, f, *L.fy_range(2026), basis="cash"))):
+        make(d / name)
+    files = all((d / n).stat().st_size > 1000 for n in ("pl.pdf", "bs.xlsx", "gst.pdf"))
+    net = gst["net_gst"]
+    good = (not problems and len(lines) == 2 and not res["errors"] and len(res["done"]) == 2 and str(net) == "190.00"
+            and bs["out_by"] == 0 and files)
+    return good, (f"{len(lines)} lines read, {len(res['done'])} reconciled, net GST {net}, balance sheet out by "
+                  f"{bs['out_by']}" + ("" if files else ", report files missing"))
+
+
 def _screens(d: Path) -> list[str]:
     """Open the main screens on the self-test clients; returns the ones that did not show."""
     from .settings import Settings
@@ -88,14 +138,19 @@ def _screens(d: Path) -> list[str]:
     os.environ["FORTIS_LEDGER_HOME"] = str(d / "settings")      # keep this PC's own settings untouched
     try:
         library = d / "library"
-        slug = FolderStore(library, user="self-test", machine="self-test").list_clients()[0].slug
+        clients = FolderStore(library, user="self-test", machine="self-test").list_clients()
+        slug = clients[0].slug
+        banked = next((c.slug for c in clients if c.name == "Self Test Bank"), slug)
         app = create_app(Settings(data_folder=str(library), user_name="self-test"), token="self-test",
                          work_dir=d / "work")
         c = app.test_client()
         c.get("/?token=self-test")
         bad = []
         for path in ("/", f"/c/{slug}/", f"/c/{slug}/trial-balance", f"/c/{slug}/journals/new", f"/c/{slug}/reports",
-                     f"/c/{slug}/year-end", "/xero", "/firm", "/setup",
+                     f"/c/{slug}/year-end", f"/c/{slug}/profit-and-loss", f"/c/{slug}/balance-sheet",
+                     f"/c/{banked}/bank", f"/c/{banked}/gst-report", f"/c/{banked}/journals/new",
+                     *(f"/c/{banked}/bank/{code}" for code in FolderStore(library).list_bank_accounts(banked)),
+                     "/xero", "/firm", "/setup",
                      "/signin?again=1", "/static/app.css", "/static/fortis-logo.svg"):
             r = c.get(path)
             if r.status_code != 200 or (path.startswith("/c/") and b'id="i-home"' not in r.data):

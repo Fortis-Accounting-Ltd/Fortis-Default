@@ -1,0 +1,87 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Check the statement{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Check the statement</h1>
+    <p class="muted">{{ meta.file }} into {{ code }} {{ a.name if a else "" }}</p>
+  </div>
+  <form method="post" action="{{ url_for('ui.bank_import_cancel', slug=client.slug, pid=pid) }}" class="actions">
+    {{ m.csrf() }}<button class="btn">Cancel</button>
+  </form>
+</div>
+
+{% if errors %}
+<div class="flash error" role="alert">{{ m.icon("alert") }}<div><strong>Not imported yet:</strong>
+  <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div></div>
+{% endif %}
+
+<div class="stats">
+  <div class="stat"><span>Lines in the file</span><strong>{{ pv.lines|length }}</strong></div>
+  <div class="stat"><span>New lines to import</span><strong>{{ pv.new }}</strong></div>
+  <div class="stat"><span>Spent</span><strong>{{ pv.spent|money0 }}</strong></div>
+  <div class="stat"><span>Received</span><strong>{{ pv.received|money0 }}</strong></div>
+  {% if pv["from"] %}<div class="stat"><span>Dates</span><strong class="stat-small">{{ pv["from"]|dmy }} – {{ pv["to"]|dmy }}</strong></div>{% endif %}
+</div>
+
+<form method="post" class="panel" id="columns-form">
+  {{ m.csrf() }}
+  <h2>Columns</h2>
+  <p class="help">Say what each column of the file holds. Columns left as "Not used" are ignored. The bank's own running balance is
+    optional - when it is there, the Bank page compares it with the ledger.</p>
+  <table class="grid compact">
+    <thead><tr><th>Column in the file</th><th>Example</th><th>Holds</th></tr></thead>
+    <tbody>
+    {% for c in columns %}
+    <tr>
+      <td><strong>{{ c.title }}</strong></td>
+      <td class="muted">{{ c.sample or "(blank)" }}</td>
+      <td><select name="role_{{ c.index }}" aria-label="What {{ c.title }} holds">
+        <option value="">Not used</option>
+        {% for k, label in roles.items() %}<option value="{{ k }}"{% if c.role == k %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="form-row wrap">
+    <div class="field"><label for="header_row">Column titles are on</label>
+      <select id="header_row" name="header_row">
+        <option value="0"{% if layout.header_row < 0 %} selected{% endif %}>No titles - the first row is a transaction</option>
+        {% for i in range(1, title_rows + 1) %}<option value="{{ i }}"{% if layout.header_row == i - 1 %} selected{% endif %}>Row {{ i }}</option>{% endfor %}
+      </select></div>
+    <div class="field"><label for="date_order">Dates are written</label>
+      <select id="date_order" name="date_order">
+        {% for k, label in orders.items() %}<option value="{{ k }}"{% if layout.date_order == k %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></div>
+  </div>
+  <label class="check"><input type="checkbox" name="flip" value="yes"{% if layout.flip %} checked{% endif %}> Money spent shows as positive
+    amounts and money received as negative (most credit card files) - turn the signs around</label>
+  {% for n in pv.notes %}<p class="check attention">{{ m.icon("info") }} {{ n }}</p>{% endfor %}
+  {% if pv.problems %}
+  <details class="mt"><summary>{{ pv.problems|length }} row(s) of the file were left out</summary>
+    <ul class="small">{% for p in pv.problems[:50] %}<li>{{ p }}</li>{% endfor %}</ul></details>
+  {% endif %}
+  <div class="actions">
+    <button class="btn" name="op" value="check">Check again</button>
+    <button class="btn primary" name="op" value="import"{% if not pv.new or readonly %} disabled{% endif %}>Import {{ pv.new }} line{{ "s" if pv.new != 1 }}</button>
+  </div>
+</form>
+
+<h2>What will be imported <span class="muted small">{% if pv.lines|length > sample|length %}first {{ sample|length }} of {{ pv.lines|length }} lines, {% endif %}oldest first</span></h2>
+<table class="grid compact">
+  <thead><tr><th>Date</th><th>Payee</th><th>Description</th><th>Reference</th><th class="num">Spent</th><th class="num">Received</th><th class="num">Balance</th><th></th></tr></thead>
+  <tbody>
+  {% for ln, dup in sample %}
+  {% set sp, rc = bank_amounts(ln.amount) %}
+  <tr{% if dup %} class="muted"{% endif %}>
+    <td class="nowrap">{{ ln.date|dmy }}</td><td>{{ ln.payee }}</td><td>{{ ln.description }}</td><td>{{ ln.reference }}</td>
+    <td class="num">{{ sp }}</td><td class="num">{{ rc }}</td><td class="num">{{ ln.balance|money0 if ln.balance is not none else "" }}</td>
+    <td>{% if dup %}<span class="badge light">Already imported</span>{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="8" class="empty">No statement lines found - choose the date and amount columns above and Check again.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

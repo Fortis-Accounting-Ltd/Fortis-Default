@@ -55,6 +55,8 @@ def client_fields_from_org(org_json: dict) -> dict:
             "abn": format_abn(org.get("RegistrationNumber") or ""),
             "fy_end_month": int(org.get("FinancialYearEndMonth") or 6),
             "fy_end_day": int(org.get("FinancialYearEndDay") or 30),
+            # Xero's GST basis is NONE for an organisation that is not registered for GST
+            "gst_registered": (org.get("SalesTaxBasis") or "NONE").upper() != "NONE",
             "source": {"xero_organisation_id": org.get("OrganisationID", ""), "xero_class": org.get("Class", "")}}
 
 

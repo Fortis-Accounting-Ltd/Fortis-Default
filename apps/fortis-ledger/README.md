@@ -1,8 +1,8 @@
 # Fortis Ledger
 
 A desktop ledger for the clients we keep in Xero only for year-end work. It does what we use the Xero
-Ledger plan for: a chart of accounts with report codes, manual journals, trial balance imports,
-year-end roll-forward, and Xero-style reports. The data lives in a SharePoint document library, so
+Ledger plan for: a chart of accounts with report codes, manual journals, bank statements with cash
+coding, GST, trial balance imports, year-end roll-forward, and Xero-style reports. The data lives in a SharePoint document library, so
 the whole firm works from one copy.
 
 The Financial Reports come from the app's own copy of the report engine (`fortis_ledger/reportengine`),
@@ -14,12 +14,14 @@ changes the skill. The two are separate from now on: a change to one does not re
 | | |
 |---|---|
 | **Clients** | Company, trust, partnership or sole trader. Each starts with the firm's chart for its type, or with its own Xero chart. |
-| **Chart of accounts** | Add, rename or re-code accounts. The report code (Xero's, e.g. `LIA.CUR.PAY.TRA`) decides where an account prints and which note groups it. Exports in Xero's CSV format. |
+| **Chart of accounts** | Add, rename or re-code accounts. The report code (Xero's, e.g. `LIA.CUR.PAY.TRA`) decides where an account prints and which note groups it. Exports in Xero's CSV format. A **New account** pop-up on the journal and cash coding screens adds an account (type, number, name and, for GST clients, tax rate) without leaving the screen. |
+| **Bank statements and cash coding** | Import the CSV (or Excel) statement from internet banking into a bank, card or loan account; the columns are found for you and checked on screen first, and lines already imported are skipped. Code each line to an account - suggested from how the same payee was coded before - and reconcile: it posts as a bank transaction, with the GST split out. Transfers between two accounts with statements post once. The Overview shows each bank account's lines to reconcile and the statement balance beside the ledger balance. |
+| **GST** | Tick *Registered for GST* on Client details. Bank lines and journal lines then take a tax rate (Xero's: GST on Income, GST on Expenses, GST Free ..., BAS Excluded), and the GST goes to the GST account. Journals can be entered GST inclusive or exclusive. |
 | **Manual journals** | Debits must equal credits, the date must fall in the year, and only chart accounts can be used. Journals can be drafts (unbalanced allowed, never in the balances), posted, edited, copied, reversed (e.g. accruals on 1 July) or voided with a reason. |
 | **Imports** (each one is previewed before anything posts) | **Trial balance / classified account list** (CSV or Excel): code, name and either debit/credit columns, one balance column, or CY and PY columns; Xero's Trial Balance export works as it is. **Xero manual-journal CSV**, or a plain journal file. **Chart of accounts** (Xero export). **Fortis workpaper** (P&L and Balance Sheet tabs, or an ITR Business tab). |
 | **Balances** | Like Xero: balance-sheet accounts carry forward, P&L accounts start each year at nil, and last year's profit goes to retained earnings. An import *sets* each account to the file's figure: it posts only the difference from what the ledger already holds. So you can re-import a corrected file, and loading each year's TB never double counts. |
 | **Year end** | Roll forward opens the next year and posts one closing journal on its first day. Company dividends go into retained earnings. Each beneficiary's or partner's drawings, contributions and share of profit go into their opening balance. A sole trader's drawings go into retained earnings. If the year changes later, the app flags the closing journal for a refresh. Lock a year once its reports are signed; unlocking needs a reason. |
-| **Reports** | **Financial Reports** pack (PDF, the firm's Xero template, with comparatives from the ledger; DRAFT stamp until marked final). **Trial Balance**, **General Ledger** and **Journal Report** (PDF or Excel). All are saved in the client's folder in SharePoint. The trial balance and account transactions can also be viewed on screen, with drill-down to each journal. |
+| **Reports** | **Financial Reports** pack (PDF, the firm's Xero template, with comparatives from the ledger; DRAFT stamp until marked final). **Profit and Loss** and **Balance Sheet** on their own, for any period or date, with the year before beside them. **General Ledger Detail**, **Trial Balance**, **Journal Report**, and the **GST Report** on the cash or accrual basis with the BAS labels (G1, G3, G4, G10, G11, 1A, 1B). PDF or Excel, saved in the client's folder in SharePoint; all but the pack can also be viewed on screen, with drill-down to each transaction. |
 | **Change log** | Every change records who made it, when, on which PC, and what was there before. SharePoint also keeps each file's version history. |
 | **Edit lock** | One person edits a client at a time; others can view it read only. The lock frees itself after 15 minutes if a PC goes away, and someone can take it over. |
 | **Move a client off Xero** | **Connect to Xero** signs in to Xero from the app and brings a client's chart and year-end trial balances straight across (read only), then disconnects it. Or give the app the client's Xero chart export and trial balance exports. Either way, every year's closing balances match Xero. |
@@ -168,6 +170,46 @@ Then click **Move a client from Xero** in the app and give it the chart and all 
 reads the year from each report's "As at" date. Check each year's trial balance against Xero, look
 at the accounts listed under *Check these accounts' report codes*, then generate the Financial Reports.
 
+## Bank statements and cash coding
+
+1. In internet banking, export the account's transactions as a **CSV** file (CommBank, Westpac, NAB, ANZ,
+   St.George, Macquarie, Bendigo and most other banks offer one; an Excel file works too).
+2. In the client, open **Bank** (or *Import a statement* on the Overview), choose the bank account - or
+   make one with **New bank account** - and the file, then **Upload and check**.
+3. Check the columns: the app shows which column it read as the date, the amount (or the spent and
+   received columns), the payee, description, reference and the bank's running balance, with every line
+   it will import. Change any of them, or tick *Money spent shows as positive* for credit card files.
+   Lines already in the account (an overlapping statement imported before) are marked and skipped.
+4. **Import**. The lines wait under *To reconcile*. Nothing is in the ledger yet.
+5. Code each line: type or pick the account (the account's tax rate comes with it) - or tick several lines
+   and *Code the ticked lines*. Lines from a payee coded before are filled in and marked *Suggested*.
+   Coding a line ticks it; Enter moves to the next line. **New account** adds an account on the spot.
+6. **Reconcile ticked lines**. Each line posts as a bank transaction (`B2026-0001` ...): the bank account
+   against the account chosen, with the GST split out for a GST-registered client. A line that cannot be
+   posted (e.g. its year is locked or not started) stays, with the reason beside it.
+
+Good to know:
+- A transfer between two accounts that both have statements is posted once: code the second side to the
+  first account and it is matched to the transaction already posted there.
+- To change a reconciled line, **Unreconcile** it on the *Reconciled* tab: it comes out of the ledger and
+  goes back to be coded. Numbers are never reused.
+- Lines that are not real transactions can be deleted (with a reason); they are kept under *Statements*
+  and can be put back.
+- Bank transactions show in the reports, the general ledger and *Journals* (choose *Bank transactions*),
+  but they are changed only from the Bank page.
+
+## GST and the GST report
+
+Tick **Registered for GST** on Client details (Connect to Xero sets it from the Xero organisation). Then:
+- cash coding offers a tax rate per line, starting from the account's own (the chart's tax code);
+- the journal editor has a tax rate per line and *Amounts are GST inclusive / exclusive*; the GST lines
+  to the GST account are made for you;
+- the **GST report** (Reports > GST report) gives the BAS labels and the transactions behind them.
+  *Cash basis* counts money received and paid - the bank transactions. *Accrual basis* also counts
+  journals with a tax rate, e.g. invoices raised or bills received entered as journals.
+
+The app does not lodge the BAS; the report gives the figures to lodge.
+
 ## How the data is stored
 
 Plain files, so nothing is locked inside the app:
@@ -184,6 +226,7 @@ Plain files, so nothing is locked inside the app:
     years/<FY>/year.json          locked or open, lock history
     years/<FY>/journals/J<FY>-0001.json ...
     years/<FY>/reports/           generated reports
+    bank/<account code>.json      a bank account's statement lines, how each was coded, the imports
   archived/                       archived clients (moved here, never deleted)
 ```
 
@@ -197,9 +240,10 @@ has just changed, and close the client (go back to Clients) when you finish.
 ## What it does not do (yet)
 
 Not built yet:
-- Bank feeds and bank reconciliation
+- Live bank feeds: statements are imported from files. Lines are cash coded; there is no matching to
+  invoices or bills
 - Invoicing and contacts
-- GST/BAS
+- Lodging the BAS (the GST report gives the figures)
 - Payroll
 - Tracking categories
 - A fixed asset register: depreciation comes in through journals or the workpaper import
@@ -211,8 +255,11 @@ The plan is to add the asset register next.
 ## For developers
 
 - `fortis_ledger/`: `store.py` (folder storage, change log, edit lock, firm settings), `ledger.py` (journal
-  rules, balances, year-end close), `imports.py`, `xero.py` (migration), `reports.py`, `web/` (the screens:
-  Flask, served on 127.0.0.1 with a start-up token and CSRF checks) and `desktop.py` (pywebview window).
+  rules, balances, GST lines, year-end close), `bank.py` (reading bank statement files, duplicates, cash
+  coding, transfers, suggestions; reconciled lines are the ledger's bank transactions), `statements.py`
+  (Profit and Loss, Balance Sheet and GST report figures), `imports.py`, `xero.py` (migration), `reports.py`
+  (PDF and Excel), `web/` (the screens: Flask, served on 127.0.0.1 with a start-up token and CSRF checks;
+  `bankviews.py` holds the bank screens) and `desktop.py` (pywebview window).
 - Sign-ins: `oauth.py` is the shared part: OAuth 2.0 authorisation code with PKCE, returning to a one-off listener
   on localhost (RFC 8252). It uses no client secret, and tokens stay in memory. `msauth.py` is office sign-in
   (Microsoft Entra ID; it checks the tenant, the audience, the nonce and the email domain). `xero_connect.py`

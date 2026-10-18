@@ -52,15 +52,60 @@
   </form>
 
   <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="card">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="profit_and_loss">
+    <h2>Profit and Loss</h2>
+    <p class="help">Income and expenses by section - Trading Income, Cost of Sales, Other Income, Operating Expenses - to Net Profit.</p>
+    <div class="form-grid compact">
+      <label for="pl-start">From</label><input id="pl-start" name="start" value="{{ fy_start|dmy }}" class="date">
+      <label for="pl-end">To</label><input id="pl-end" name="end" value="{{ fy_end|dmy }}" class="date">
+    </div>
+    <label class="check"><input type="checkbox" name="compare" value="yes" checked> Compare with the year before</label>
+    <input type="hidden" name="compare" value="no">
+    <label class="check"><input type="checkbox" name="open" value="yes"{% if desktop %} checked{% endif %}> Open it when it is ready</label>
+    <div class="actions"><button class="btn" name="format" value="pdf">PDF</button><button class="btn" name="format" value="xlsx">Excel</button>
+      <a class="btn link" href="{{ url_for('ui.profit_and_loss', slug=client.slug, fy=fy) }}">View on screen</a></div>
+  </form>
+
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="card">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="balance_sheet">
+    <h2>Balance Sheet</h2>
+    <p class="help">Assets, liabilities and equity - with this year's earnings - as at any date.</p>
+    <div class="form-grid compact"><label for="bs-as-at">As at</label><input id="bs-as-at" name="as_at" value="{{ fy_end|dmy }}" class="date"></div>
+    <label class="check"><input type="checkbox" name="compare" value="yes" checked> Compare with a year earlier</label>
+    <input type="hidden" name="compare" value="no">
+    <label class="check"><input type="checkbox" name="open" value="yes"{% if desktop %} checked{% endif %}> Open it when it is ready</label>
+    <div class="actions"><button class="btn" name="format" value="pdf">PDF</button><button class="btn" name="format" value="xlsx">Excel</button>
+      <a class="btn link" href="{{ url_for('ui.balance_sheet', slug=client.slug, fy=fy) }}">View on screen</a></div>
+  </form>
+
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="card">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="gst_report">
+    <h2>GST Report</h2>
+    <p class="help">GST by tax rate with the BAS labels (G1, G3, G10, G11, 1A, 1B) and every transaction behind them. Cash basis counts
+      money received and paid; accrual basis also counts journals with a tax rate.</p>
+    <div class="form-grid compact">
+      <label for="gst-start">From</label><input id="gst-start" name="start" value="{{ fy_start|dmy }}" class="date">
+      <label for="gst-end">To</label><input id="gst-end" name="end" value="{{ fy_end|dmy }}" class="date">
+      <label for="gst-basis">Basis</label>
+      <select id="gst-basis" name="basis"><option value="accrual">Accrual</option><option value="cash">Cash</option></select>
+    </div>
+    <label class="check"><input type="checkbox" name="open" value="yes"{% if desktop %} checked{% endif %}> Open it when it is ready</label>
+    <div class="actions"><button class="btn" name="format" value="pdf">PDF</button><button class="btn" name="format" value="xlsx">Excel</button>
+      <a class="btn link" href="{{ url_for('ui.gst_page', slug=client.slug, fy=fy) }}">View on screen</a></div>
+  </form>
+
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="card">
     {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="general_ledger">
-    <h2>General Ledger</h2>
+    <h2>General Ledger Detail</h2>
+    <p class="help">Every transaction in each account, with opening and closing balances.</p>
     <div class="form-grid compact">
       <label for="gl-start">From</label><input id="gl-start" name="start" value="{{ fy_start|dmy }}" class="date">
       <label for="gl-end">To</label><input id="gl-end" name="end" value="{{ fy_end|dmy }}" class="date">
       <label for="gl-codes">Accounts</label><input id="gl-codes" name="codes" placeholder="All, or codes e.g. 13600, 31300">
     </div>
     <label class="check"><input type="checkbox" name="open" value="yes"{% if desktop %} checked{% endif %}> Open it when it is ready</label>
-    <div class="actions"><button class="btn" name="format" value="pdf">PDF</button><button class="btn" name="format" value="xlsx">Excel</button></div>
+    <div class="actions"><button class="btn" name="format" value="pdf">PDF</button><button class="btn" name="format" value="xlsx">Excel</button>
+      <a class="btn link" href="{{ url_for('ui.account_transactions', slug=client.slug, fy=fy) }}">View on screen</a></div>
   </form>
 
   <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="card">

@@ -173,8 +173,8 @@ def create_app(settings: Settings | None = None, token: str | None = None,
     for code in (400, 403, 404, 405, 413, 500):
         app.register_error_handler(code, _error_page(code))
 
-    from . import views
-    app.register_blueprint(views.bp)
+    from .bankviews import bp      # the screens' blueprint (views.py) with the bank screens added to it
+    app.register_blueprint(bp)
     return app
 
 

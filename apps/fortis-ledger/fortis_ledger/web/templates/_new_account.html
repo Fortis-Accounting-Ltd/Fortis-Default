@@ -1,0 +1,36 @@
+{# The "New account" pop-up: opened by any button with data-new-account (the page's script); added accounts go
+   straight into the page's account lists.  Without the script, accounts are added on the Chart of accounts page. #}
+<dialog id="new-account" class="dialog" aria-labelledby="na-title">
+  <form method="post" action="{{ url_for('ui.account_quick_add', slug=client.slug) }}" id="new-account-form" autocomplete="off">
+    {{ m.csrf() }}<input type="hidden" name="next" value="{{ request.full_path }}">
+    <h2 id="na-title">New account</h2>
+    <p class="help">It is added to {{ client.name }}'s chart of accounts and can be used straight away.</p>
+    <div class="form-grid compact">
+      <label for="na-type">Account type</label>
+      <select id="na-type" name="type" required>
+        {% for t in acct_types %}<option{% if t == "Expense" %} selected{% endif %}>{{ t }}</option>{% endfor %}
+      </select>
+      <label for="na-code">Account number</label>
+      <input id="na-code" name="code" required maxlength="10" class="short mono" placeholder="e.g. 61150">
+      <label for="na-name">Account name</label>
+      <input id="na-name" name="name" required placeholder="e.g. Staff amenities">
+      {% if client.gst_registered %}
+      <label for="na-tax">Tax rate</label>
+      <select id="na-tax" name="tax">{% for t in tax_choices %}<option>{{ t }}</option>{% endfor %}</select>
+      {% endif %}
+    </div>
+    <details class="more">
+      <summary>Report code</summary>
+      <input id="na-rc" name="report_code" list="dl-na-codes" class="mono" placeholder="From the account type" aria-label="Report code">
+      <span class="help">Where the account prints in the Financial Reports. Left blank, it follows the account type -
+        it can be changed later on the Chart of accounts.</span>
+    </details>
+    <p class="err-text hidden" id="na-error" role="alert"></p>
+    <div class="actions">
+      <button class="btn primary">Add account</button>
+      <button type="button" class="btn" data-close-dialog>Cancel</button>
+    </div>
+  </form>
+  {{ m.code_datalist(codes, "dl-na-codes") }}
+  <script type="application/json" id="type-defaults">{{ type_defaults|tojson }}</script>
+</dialog>

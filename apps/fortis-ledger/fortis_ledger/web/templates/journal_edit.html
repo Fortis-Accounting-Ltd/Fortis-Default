@@ -21,15 +21,23 @@
       <input id="narration" name="narration" value="{{ j.narration }}" required placeholder="e.g. Depreciation for the year"></div>
     <div class="field"><label for="reference">Reference</label>
       <input id="reference" name="reference" value="{{ j.reference }}"></div>
+    {% if gst_on %}
+    <div class="field"><label for="amounts">Amounts are</label>
+      <select id="amounts" name="amounts">
+        <option value="inclusive"{% if j.amounts != "exclusive" %} selected{% endif %}>GST inclusive</option>
+        <option value="exclusive"{% if j.amounts == "exclusive" %} selected{% endif %}>GST exclusive</option>
+      </select></div>
+    {% endif %}
   </div>
   <table class="grid lines" id="journal-lines">
-    <thead><tr><th class="acct">Account</th><th>Description</th><th class="num">Debit</th><th class="num">Credit</th><th></th></tr></thead>
+    <thead><tr><th class="acct">Account</th><th>Description</th>{% if gst_on %}<th>Tax rate</th>{% endif %}<th class="num">Debit</th><th class="num">Credit</th><th></th></tr></thead>
     <tbody>
     {% for ln in lines %}
     <tr>
       <td class="acct"><input name="account_{{ loop.index0 }}" value="{{ ln.account }}" list="dl-accounts" class="account" aria-label="Account">
         <span class="acct-name muted">{{ names.get(ln.account, "") }}</span></td>
       <td><input name="desc_{{ loop.index0 }}" value="{{ ln.description }}" aria-label="Description"></td>
+      {% if gst_on %}<td>{{ m.tax_select("tax_" ~ loop.index0, ln.tax, tax_choices, blank="No GST") }}</td>{% endif %}
       <td class="num"><input name="debit_{{ loop.index0 }}" value="{{ ln.debit }}" class="amount dr" inputmode="decimal" aria-label="Debit"></td>
       <td class="num"><input name="credit_{{ loop.index0 }}" value="{{ ln.credit }}" class="amount cr" inputmode="decimal" aria-label="Credit"></td>
       <td><button type="button" class="btn link remove-line" title="Remove line" aria-label="Remove line">×</button></td>
@@ -37,22 +45,26 @@
     {% endfor %}
     </tbody>
     <tfoot>
-      <tr class="total"><td><button type="button" class="btn small" id="add-line">Add a line</button></td><td class="right">Total</td>
+      <tr class="total"><td><button type="button" class="btn small" id="add-line">Add a line</button>
+        <button type="button" class="btn small ghost hidden" data-new-account>{{ m.icon("plus") }} New account</button></td>
+        <td class="right">Total{% if gst_on %}<span class="muted small d-block" id="gst-note"></span>{% endif %}</td>{% if gst_on %}<td></td>{% endif %}
         <td class="num" id="total-dr">0.00</td><td class="num" id="total-cr">0.00</td><td></td></tr>
-      <tr><td></td><td class="right muted">Difference</td><td class="num" colspan="2" id="difference">0.00</td><td></td></tr>
+      <tr><td></td><td class="right muted">Difference</td>{% if gst_on %}<td></td>{% endif %}<td class="num" colspan="2" id="difference">0.00</td><td></td></tr>
     </tfoot>
   </table>
   <template id="line-template">
     <tr>
       <td class="acct"><input name="account___i__" list="dl-accounts" class="account" aria-label="Account"><span class="acct-name muted"></span></td>
       <td><input name="desc___i__" aria-label="Description"></td>
+      {% if gst_on %}<td>{{ m.tax_select("tax___i__", "", tax_choices, blank="No GST") }}</td>{% endif %}
       <td class="num"><input name="debit___i__" class="amount dr" inputmode="decimal" aria-label="Debit"></td>
       <td class="num"><input name="credit___i__" class="amount cr" inputmode="decimal" aria-label="Credit"></td>
       <td><button type="button" class="btn link remove-line" title="Remove line" aria-label="Remove line">×</button></td>
     </tr>
   </template>
   {{ m.account_datalist(accounts) }}
-  <script type="application/json" id="account-names">{{ names|tojson }}</script>
+  <script type="application/json" id="account-info">{{ info|tojson }}</script>
+  <script type="application/json" id="tax-rates">{{ rates|tojson }}</script>
   <div class="actions">
     <button class="btn primary" name="op" value="post">{% if not new and j.status == "posted" %}Save changes{% else %}Post{% endif %}</button>
     {% if new %}<button class="btn" name="op" value="post_new">Post and add another</button>{% endif %}
@@ -60,8 +72,11 @@
     {% if new %}<a class="btn link" href="{{ url_for('ui.journals', slug=client.slug, fy=jfy) }}">Cancel</a>{% endif %}
   </div>
   <p class="help">Debits must equal credits before a journal can be posted. Drafts can be saved unbalanced and never affect the balances.
-    Amounts can be typed as <code>1234.5</code>, <code>1,234.50</code> or <code>(1,234.50)</code>.</p>
+    Amounts can be typed as <code>1234.5</code>, <code>1,234.50</code> or <code>(1,234.50)</code>.{% if gst_on %} On a line with a GST tax
+    rate the GST is posted for you to the GST account: GST inclusive amounts are split into the amount and its GST, GST exclusive
+    amounts have the GST added.{% endif %}</p>
 </form>
+{% if not readonly %}{% include "_new_account.html" %}{% endif %}
 {% if not new and j.status == "draft" %}
 <form method="post" action="{{ url_for('ui.journal_delete', slug=client.slug, jfy=jfy, number=j.number) }}" class="inline-form"
       data-confirm="Delete draft {{ j.number }}?">{{ m.csrf() }}<button class="btn danger small">Delete draft</button></form>

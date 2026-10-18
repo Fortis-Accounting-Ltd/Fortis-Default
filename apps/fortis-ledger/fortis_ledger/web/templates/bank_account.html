@@ -1,0 +1,179 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}{{ code }} {{ a.name if a else "" }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ a.name if a else code }} <span class="muted">{{ code }}</span></h1>
+    <p class="muted">{{ a.type if a else "Account not in the chart" }}{% if feed.data.imports %} · {{ feed.data.imports|length }} statement import{{ "s" if feed.data.imports|length != 1 }}{% endif %}</p>
+  </div>
+  <div class="actions">
+    {% if not readonly %}<a class="btn" href="{{ url_for('ui.bank', slug=client.slug, account=code) }}#import">{{ m.icon("import") }} Import a statement</a>{% endif %}
+    <a class="btn link" href="{{ url_for('ui.account_transactions', slug=client.slug, fy=fy, code=code) }}">Account transactions</a>
+  </div>
+</div>
+
+{% if summary %}
+<div class="stats">
+  <div class="stat"><span>To reconcile</span><strong>{{ counts.code }}</strong></div>
+  {% if summary.statement %}<div class="stat"><span>Statement balance at {{ summary.statement[0]|dmy }}</span><strong>{{ summary.statement[1]|money0 }}</strong></div>{% endif %}
+  {% if summary.ledger_balance is not none %}<div class="stat"><span>Balance in ledger at {{ summary.as_at|dmy }}</span><strong>{{ summary.ledger_balance|money0 }}</strong></div>{% endif %}
+  {% if summary.statement and summary.ledger_balance is not none %}
+  {% set diff = summary.statement[1] - summary.ledger_balance %}
+  <div class="stat{% if diff %} stat-warn{% else %} stat-ok{% endif %}"><span>Difference</span><strong>{{ diff|money0 if diff else "Nil" }}</strong></div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="toolbar">
+  <div class="segmented">
+    <a href="{{ url_for('ui.bank_account', slug=client.slug, code=code) }}"{% if tab == "code" %} class="active"{% endif %}>To reconcile <span class="count">{{ counts.code }}</span></a>
+    <a href="{{ url_for('ui.bank_account', slug=client.slug, code=code, tab='done') }}"{% if tab == "done" %} class="active"{% endif %}>Reconciled <span class="count">{{ counts.done }}</span></a>
+    <a href="{{ url_for('ui.bank_account', slug=client.slug, code=code, tab='statements') }}"{% if tab == "statements" %} class="active"{% endif %}>Statements</a>
+  </div>
+  {% if tab != "statements" %}
+  <form method="get" class="inline">
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <input type="search" name="q" value="{{ q }}" placeholder="Payee, description, amount{% if tab == 'done' %} or number{% endif %}" aria-label="Search lines">
+    <button class="btn">Search</button>
+    {% if q %}<a class="btn link" href="{{ url_for('ui.bank_account', slug=client.slug, code=code, tab=tab) }}">Clear</a>{% endif %}
+  </form>
+  {% endif %}
+</div>
+
+{% if tab == "code" %}
+{% if rows %}
+<form method="post" action="{{ url_for('ui.bank_reconcile', slug=client.slug, code=code) }}" id="coding-form" autocomplete="off">
+  {{ m.csrf() }}<input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="page" value="{{ page }}">
+  <fieldset{% if readonly %} disabled{% endif %}>
+  <div class="bulk-bar hidden" id="bulk-bar">
+    <span class="muted"><strong id="ticked-count">0</strong> ticked</span>
+    <input id="bulk-account" list="dl-accounts" class="account mono" placeholder="Account" aria-label="Account for the ticked lines">
+    {% if gst_on %}{{ m.tax_select("bulk_tax", "", tax_choices, "Tax rate for the ticked lines", cls="bulk-tax") }}{% endif %}
+    <button type="button" class="btn small" id="bulk-apply">Code the ticked lines</button>
+    <button type="button" class="btn small ghost" data-new-account data-target="bulk-account">{{ m.icon("plus") }} New account</button>
+  </div>
+  <div class="table-scroll">
+  <table class="grid coding" id="coding-table">
+    <thead><tr>
+      <th class="pick"><input type="checkbox" id="pick-all" aria-label="Tick every line on this page"></th>
+      <th>Date</th><th>Payee and description</th><th>Reference</th><th class="num">Spent</th><th class="num">Received</th>
+      <th class="acct">Account</th>{% if gst_on %}<th>Tax rate</th>{% endif %}
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+    {% set ln = r.ln %}{% set sp, rc = bank_amounts(ln.amount) %}
+    <tr class="{% if r.error %}row-error{% endif %}{% if r.suggested %} suggested{% endif %}" data-line="{{ ln.id }}">
+      <td class="pick"><input type="checkbox" name="pick" value="{{ ln.id }}" aria-label="Tick this line"{% if r.error %} checked{% endif %}></td>
+      <td class="nowrap">{{ ln.date|dmy }}</td>
+      <td class="text"><strong>{{ ln.payee or ln.description }}</strong>{% if ln.payee and ln.description %}<small class="muted">{{ ln.description }}</small>{% endif %}
+        {% if r.error %}<small class="err-text">{{ r.error }}</small>{% endif %}</td>
+      <td class="small">{{ ln.reference }}</td>
+      <td class="num">{{ sp }}</td>
+      <td class="num">{{ rc }}</td>
+      <td class="acct"><input name="acct_{{ ln.id }}" value="{{ r.account }}" list="dl-accounts" class="account mono" aria-label="Account">
+        <span class="acct-name muted">{{ info.get(r.account, ["", ""])[0] }}</span>
+        {% if r.suggested %}<span class="badge info" title="Coded like this last time">Suggested</span>{% endif %}</td>
+      {% if gst_on %}<td>{{ m.tax_select("tax_" ~ ln.id, r.tax, tax_choices) }}</td>{% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if not readonly %}
+  <div class="actions sticky-actions">
+    <button class="btn primary" id="reconcile-btn">Reconcile ticked lines</button>
+    <button type="button" class="btn hidden" data-new-account>{{ m.icon("plus") }} New account</button>
+    <span class="spacer"></span>
+    <input name="reason" placeholder="Reason for deleting (optional)" aria-label="Reason for deleting" class="reason">
+    <button class="btn danger" formaction="{{ url_for('ui.bank_delete', slug=client.slug, code=code) }}" formnovalidate
+            data-confirm="Delete the ticked lines? Use this for lines that are not real transactions (e.g. a duplicate). They are kept under Statements and can be put back.">Delete ticked</button>
+  </div>
+  {% endif %}
+  </fieldset>
+  {{ m.account_datalist(accounts) }}
+  <script type="application/json" id="account-info">{{ info|tojson }}</script>
+</form>
+{{ m.pager(page, pages, "ui.bank_account", slug=client.slug, code=code, q=q or None) }}
+<p class="help">Tick the lines and Reconcile: each is posted as a bank transaction - this account against the account you chose{% if gst_on %},
+  with the GST split out to the GST account{% endif %}. Suggestions come from how the same payee was coded before.
+  Code a transfer to another bank account with a statement and it is matched to the other side instead of being posted twice.</p>
+{% else %}
+<div class="panel empty-state">
+  <span class="feature-icon">{{ m.icon("check") }}</span>
+  <div><strong>{% if q %}No lines match "{{ q }}"{% elif counts.done %}Everything is reconciled{% else %}Nothing to reconcile yet{% endif %}</strong>
+    <p class="muted">{% if not q %}Import the next statement to keep going.{% endif %}</p></div>
+</div>
+{% endif %}
+{% if not readonly %}{% include "_new_account.html" %}{% endif %}
+
+{% elif tab == "done" %}
+<table class="grid">
+  <thead><tr><th>Date</th><th>Payee and description</th><th class="num">Spent</th><th class="num">Received</th><th>Coded to</th>
+    {% if client.gst_registered %}<th>Tax rate</th><th class="num">GST</th>{% endif %}<th>Transaction</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  {% set ln = r.ln %}{% set c = r.c %}{% set sp, rc = bank_amounts(ln.amount) %}
+  <tr>
+    <td class="nowrap">{{ ln.date|dmy }}</td>
+    <td class="text"><strong>{{ ln.payee or ln.description }}</strong>{% if ln.payee and ln.description %}<small class="muted">{{ ln.description }}</small>{% endif %}</td>
+    <td class="num">{{ sp }}</td><td class="num">{{ rc }}</td>
+    <td>{{ c.account }} {{ r.name }}</td>
+    {% if client.gst_registered %}<td class="small">{{ c.tax }}</td><td class="num">{{ c.gst|money }}</td>{% endif %}
+    <td class="nowrap">
+      {% if c.match %}<a href="{{ url_for('ui.journal_view', slug=client.slug, jfy=r.fy, number=c.match.number) }}">{{ c.match.number }}</a>
+        <small class="muted">matched transfer</small>
+      {% else %}<a href="{{ url_for('ui.journal_view', slug=client.slug, jfy=r.fy, number=c.number) }}">{{ c.number }}</a>{% endif %}
+      <small class="muted d-block">{{ c.by }}{% if c.at %} · {{ c.at|when }}{% endif %}</small>
+    </td>
+    <td class="nowrap">
+      {% if not readonly and r.fy not in locked %}
+      <form method="post" action="{{ url_for('ui.bank_unreconcile', slug=client.slug, code=code) }}" class="inline-form"
+            data-confirm="Unreconcile this line? {% if c.match %}The transfer match is undone{% else %}{{ c.number }} comes out of the ledger{% endif %} and the line goes back to be coded.">
+        {{ m.csrf() }}<input type="hidden" name="line" value="{{ ln.id }}"><input type="hidden" name="q" value="{{ q }}">
+        <button class="btn small">Unreconcile</button>
+      </form>
+      {% elif r.fy in locked %}<span class="badge locked">FY{{ r.fy }} locked</span>{% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="9" class="empty">{% if q %}No reconciled lines match "{{ q }}".{% else %}Nothing reconciled yet.{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{{ m.pager(page, pages, "ui.bank_account", slug=client.slug, code=code, tab="done", q=q or None) }}
+
+{% else %}
+<h2>Statements imported</h2>
+<table class="grid">
+  <thead><tr><th>File</th><th>Imported</th><th>Dates</th><th class="num">New lines</th><th class="num">Already there</th></tr></thead>
+  <tbody>
+  {% for imp in imports %}
+  <tr><td>{{ imp.file }}</td><td class="nowrap">{{ imp.at|when }} <span class="muted small">by {{ imp.by }}</span></td>
+    <td class="nowrap">{% if imp["from"] %}{{ imp["from"]|dmy }} – {{ imp["to"]|dmy }}{% endif %}</td>
+    <td class="num">{{ imp.lines }}</td><td class="num">{{ imp.duplicates }}</td></tr>
+  {% else %}
+  <tr><td colspan="5" class="empty">No statements imported into {{ code }} yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<h2>Deleted lines</h2>
+{% if deleted %}
+<form method="post" action="{{ url_for('ui.bank_restore', slug=client.slug, code=code) }}">
+  {{ m.csrf() }}
+  <table class="grid compact">
+    <thead><tr><th></th><th>Date</th><th>Payee and description</th><th class="num">Amount</th><th>Deleted</th></tr></thead>
+    <tbody>
+    {% for ln in deleted %}
+    <tr><td><input type="checkbox" name="pick" value="{{ ln.id }}" aria-label="Tick this line"></td>
+      <td class="nowrap">{{ ln.date|dmy }}</td><td>{{ ln.payee }} {{ ln.description }}</td><td class="num">{{ ln.amount|signed }}</td>
+      <td class="small">{{ ln.deleted.at|when }} by {{ ln.deleted.by }}{% if ln.deleted.reason %} - {{ ln.deleted.reason }}{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if not readonly %}<button class="btn">Put the ticked lines back</button>{% endif %}
+</form>
+{% else %}
+<p class="muted">None.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

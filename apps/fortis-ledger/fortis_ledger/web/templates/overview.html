@@ -10,6 +10,7 @@
   {% if started %}
   <div class="actions">
     {% if not readonly and not year_locked %}<a class="btn primary" href="{{ url_for('ui.journal_new', slug=client.slug, fy=fy) }}">New journal</a>{% endif %}
+    <a class="btn" href="{{ url_for('ui.bank', slug=client.slug) }}">{{ m.icon("bank") }} Bank</a>
     <a class="btn" href="{{ url_for('ui.import_start', slug=client.slug, fy=fy) }}">Import</a>
     <a class="btn" href="{{ url_for('ui.reports_page', slug=client.slug, fy=fy) }}">Reports</a>
   </div>
@@ -48,6 +49,21 @@
   <div class="stat"><span>Total assets</span><strong>{{ figures.assets|money0 }}</strong></div>
   <div class="stat"><span>Total liabilities</span><strong>{{ figures.liabilities|money0 }}</strong></div>
   <div class="stat"><span>Net assets</span><strong>{{ figures.net_assets|money0 }}</strong></div>
+</div>
+{% endif %}
+
+<div class="section-head">
+  <h2>Bank accounts</h2>
+  {% if not readonly %}<a class="btn small" href="{{ url_for('ui.bank', slug=client.slug) }}#import">{{ m.icon("import") }} Import a statement</a>{% endif %}
+</div>
+{% if banks %}
+{{ m.bank_cards(banks, readonly) }}
+{% else %}
+<div class="panel empty-state">
+  <span class="feature-icon">{{ m.icon("bank") }}</span>
+  <div><strong>Bring in the bank</strong>
+    <p class="muted">Import a bank statement (the CSV file from internet banking) and code each line to an account, like Xero's cash coding.
+      {% if not readonly %}<a href="{{ url_for('ui.bank', slug=client.slug) }}#import">Import a statement</a>{% endif %}</p></div>
 </div>
 {% endif %}
 

@@ -26,6 +26,11 @@
     <label for="abn">ABN</label>
     <input id="abn" name="abn" value="{{ form.get('abn', '') }}" inputmode="numeric">
 
+    <label for="gst_registered">GST</label>
+    <div><label class="check"><input type="checkbox" id="gst_registered" name="gst_registered" value="yes"{% if form.get('gst_registered') in (true, 'yes') %} checked{% endif %}>
+      Registered for GST</label>
+      <span class="help">Cash coding and journals then take a tax rate, and the GST is posted to the GST account.</span></div>
+
     <label for="fy_end_month">Financial year ends</label>
     <div class="inline">
       <input id="fy_end_day" name="fy_end_day" value="{{ form.get('fy_end_day', 30) }}" class="tiny" inputmode="numeric" aria-label="Day"{% if years %} readonly{% endif %}>

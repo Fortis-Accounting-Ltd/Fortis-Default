@@ -1,0 +1,54 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}{{ data.title }}{% endblock %}
+{% block content %}
+{% set endpoint = "ui.profit_and_loss" if report == "profit_and_loss" else "ui.balance_sheet" %}
+<div class="page-head">
+  <div><h1>{{ data.title }}</h1><p class="muted">{{ data.period }}</p></div>
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="actions">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="{{ report }}"><input type="hidden" name="open" value="yes">
+    {% if report == "profit_and_loss" %}<input type="hidden" name="start" value="{{ start|dmy }}"><input type="hidden" name="end" value="{{ end|dmy }}">
+    {% else %}<input type="hidden" name="as_at" value="{{ as_at|dmy }}">{% endif %}
+    <input type="hidden" name="compare" value="{{ 'yes' if compare else 'no' }}">
+    <button class="btn" name="format" value="pdf"{% if readonly %} disabled{% endif %}>PDF</button>
+    <button class="btn" name="format" value="xlsx"{% if readonly %} disabled{% endif %}>Excel</button>
+  </form>
+</div>
+<form method="get" class="toolbar">
+  {{ m.fy_field() }}
+  {% if report == "profit_and_loss" %}
+  <label for="start">From</label><input id="start" name="start" value="{{ start|dmy }}" class="date">
+  <label for="end">To</label><input id="end" name="end" value="{{ end|dmy }}" class="date">
+  {% else %}
+  <label for="as_at">As at</label><input id="as_at" name="as_at" value="{{ as_at|dmy }}" class="date">
+  {% endif %}
+  <select name="compare" aria-label="Comparison" data-autosubmit>
+    <option value="yes"{% if compare %} selected{% endif %}>With the year before</option>
+    <option value="no"{% if not compare %} selected{% endif %}>This period only</option>
+  </select>
+  <button class="btn">Show</button>
+</form>
+{% if report == "balance_sheet" and data.out_by %}<div class="flash error">{{ m.icon("alert") }}<span>Net assets and equity differ by {{ data.out_by|money0 }} - check the trial balance.</span></div>{% endif %}
+{% if report == "balance_sheet" and data.unclassified %}<div class="flash warn">{{ m.icon("alert") }}<span>Some accounts have no balance sheet report code - they are listed at the end. Give them one on the Chart of accounts.</span></div>{% endif %}
+{% if data.get("empty") %}<div class="panel empty">No income or expenses in this period.</div>{% endif %}
+<table class="grid statement">
+  <thead><tr><th></th>{% for c in data.columns %}<th class="num">{{ c }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for r in data.rows %}
+  <tr class="st-{{ r.kind }}">
+    {% if r.kind in ("heading", "subheading") %}
+    <td colspan="{{ data.columns|length + 1 }}">{{ r.label }}</td>
+    {% else %}
+    <td>{% if r.code %}<a href="{{ url_for('ui.account_transactions', slug=client.slug, fy=fy, code=r.code) }}">{{ r.label }}</a>{% else %}{{ r.label }}{% endif %}</td>
+    <td class="num">{{ r.cy|money0 if r.cy else "–" }}</td>
+    {% if data.compare %}<td class="num">{{ r.py|money0 if r.py else "–" }}</td>{% endif %}
+    {% endif %}
+  </tr>
+  {% else %}
+  <tr><td class="empty">Nothing for this period.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="help">{% if report == "profit_and_loss" %}Grouped by each account's report code, the way Xero lays out its Profit and Loss.
+  The period can run across financial years.{% else %}Current Year Earnings is the profit for the year to this date; earlier years' profits are in retained earnings.{% endif %}
+  Click an account for its transactions. Brackets are negative.</p>
+{% endblock %}

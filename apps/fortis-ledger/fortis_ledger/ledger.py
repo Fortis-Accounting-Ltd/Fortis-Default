@@ -20,6 +20,7 @@ import re
 from collections import defaultdict
 from decimal import Decimal
 
+from . import bank as bankmod
 from .chartbook import ChartError, ClientChart, code_sort_key, is_pl_account
 from .engine import nature, slot_of
 from .model import Journal, Line, now_iso, parse_date
@@ -46,6 +47,7 @@ class Ledger:
         self.client = store.load_client(slug)
         self.chart = ClientChart(store.chart_path(slug), self.client.type)
         self._closing_cache: dict = {}
+        self._bank: dict[int, list[Journal]] | None = None
 
     # ---- accounts ----------------------------------------------------------------------- #
     def account(self, code: str):
@@ -130,12 +132,63 @@ class Ledger:
         self.store.audit(self.slug, "year.unlocked", {"fy": fy, "reason": reason})
 
     # ---- journals ----------------------------------------------------------------------- #
-    def journals(self, fy: int, statuses=("posted",)) -> list[Journal]:
-        js = self.store.list_journals(self.slug, fy)
-        return [j for j in js if statuses is None or j.status in statuses]
+    def journals(self, fy: int, statuses=("posted",), bank: bool = True) -> list[Journal]:
+        """The year's journals; bank=True adds the bank transactions (reconciled statement lines)."""
+        js = [j for j in self.store.list_journals(self.slug, fy) if statuses is None or j.status in statuses]
+        if bank and (statuses is None or "posted" in statuses):
+            js = sorted(js + self.bank_journals(fy), key=lambda j: (j.date, j.number))
+        return js
+
+    def bank_journals(self, fy: int) -> list[Journal]:
+        if self._bank is None:
+            self._bank = bankmod.journals_by_fy(self.store, self.slug, self.client)
+        return list(self._bank.get(fy, []))
+
+    def bank_changed(self) -> None:
+        self._bank = None
+        self._closing_cache.clear()
 
     def get_journal(self, fy: int, number: str) -> Journal:
+        if bankmod.NUMBER_RE.match(number or ""):
+            j = next((j for j in self.bank_journals(fy) if j.number == number), None)
+            if j is None:
+                raise StoreError(f"no bank transaction {number} in FY{fy}")
+            return j
         return self.store.load_journal(self.slug, fy, number)
+
+    def apply_gst(self, j: Journal) -> None:
+        """
+        Work out the GST on lines with a GST tax rate and post it on automatic lines to the GST account.
+        Amounts are GST inclusive (the line is cut back to the net amount) unless the journal says exclusive.
+        """
+        j.lines = [ln for ln in j.lines if not ln.auto]
+        gst_lines = []
+        for ln in j.lines:
+            ln.gst = ZERO
+            if ln.tax and ln.tax not in bankmod.TAX_RATES:
+                raise ValidationError([f"{ln.tax} is not a tax rate - choose one from the list"])
+            rate = bankmod.TAX_RATES.get(ln.tax, 0)
+            amount = ln.debit or ln.credit
+            if not rate or not amount or (ln.debit and ln.credit):
+                continue
+            if j.amounts == "exclusive":
+                gst = q2(amount * rate / 100)
+            else:
+                gst = q2(amount * rate / (100 + rate))
+                if ln.debit:
+                    ln.debit = amount - gst
+                else:
+                    ln.credit = amount - gst
+            ln.gst = gst
+            gst_lines.append(Line("", debit=gst if ln.debit else ZERO, credit=gst if ln.credit else ZERO,
+                                  description=f"GST - {ln.description or ln.account}", auto=True))
+        if gst_lines:
+            code = bankmod.gst_account(self)
+            if not code:
+                raise ValidationError(["the chart has no GST account - add one (account type GST)"])
+            for g in gst_lines:
+                g.account = code
+            j.lines.extend(gst_lines)
 
     def validate(self, j: Journal, fy: int) -> list[str]:
         errors = []
@@ -171,6 +224,8 @@ class Ledger:
 
     def save_journal(self, j: Journal, fy: int | None = None, post: bool = True, action: str | None = None) -> Journal:
         """Save a draft (post=False) or post a journal.  Raises ValidationError when posting fails the rules."""
+        if j.kind == "bank" or bankmod.NUMBER_RE.match(j.number or ""):
+            raise LedgerError("bank transactions change on the Bank page - unreconcile the line and code it again")
         self.store.require_lock(self.slug)
         fy = fy or self.client.fy_of(j.date)
         j.lines = [ln for ln in j.lines if ln.account or ln.debit or ln.credit]
@@ -217,6 +272,8 @@ class Ledger:
         if self.is_locked(fy):
             raise ValidationError([f"FY{fy} is locked (finalised) - unlock it first"])
         j = self.get_journal(fy, number)
+        if j.kind == "bank":
+            raise LedgerError("a bank transaction is not voided - unreconcile its line on the Bank page instead")
         if j.status == "void":
             return j
         j.status = "void"
@@ -236,12 +293,15 @@ class Ledger:
 
     def reverse_journal(self, fy: int, number: str, on: dt.date | None = None) -> Journal:
         orig = self.get_journal(fy, number)
+        if orig.kind == "bank":
+            raise LedgerError("a bank transaction is not reversed - unreconcile its line on the Bank page instead")
         if orig.status != "posted":
             raise LedgerError("only posted journals can be reversed")
         on = on or (self.fy_range(fy + 1)[0] if orig.date == self.fy_range(fy)[1] else orig.date)
         rev = Journal(date=on, narration=f"Reversal of {orig.number}: {orig.narration}", kind="reversal",
-                      lines=[Line(ln.account, debit=ln.credit, credit=ln.debit, description=ln.description)
-                             for ln in orig.lines], reverses=orig.number)
+                      lines=[Line(ln.account, debit=ln.credit, credit=ln.debit, description=ln.description,
+                                  tax=ln.tax, gst=ln.gst, auto=ln.auto)
+                             for ln in orig.lines], reverses=orig.number, amounts=orig.amounts)
         rfy = self.client.fy_of(on)
         self.ensure_year(rfy)
         rev = self.save_journal(rev, rfy, post=True, action="journal.reversed")
@@ -502,18 +562,20 @@ class Ledger:
 
 
 def journal_from_form(form: dict, default_date: dt.date | None = None) -> Journal:
-    """Build a Journal from posted form fields (narration, date, account_N, debit_N, credit_N, desc_N)."""
+    """Build a Journal from posted form fields (narration, date, account_N, debit_N, credit_N, desc_N, tax_N)."""
     from .money import to_dec
     lines = []
-    idx = sorted({int(k.split("_")[1]) for k in form if re.fullmatch(r"(account|debit|credit|desc)_\d+", k)})
+    idx = sorted({int(k.split("_")[1]) for k in form if re.fullmatch(r"(account|debit|credit|desc|tax)_\d+", k)})
     for i in idx:
         acct = (form.get(f"account_{i}") or "").strip()
         acct = acct.split(" ")[0].strip() if acct else ""
         lines.append(Line(account=acct, debit=to_dec(form.get(f"debit_{i}")), credit=to_dec(form.get(f"credit_{i}")),
-                          description=(form.get(f"desc_{i}") or "").strip()))
+                          description=(form.get(f"desc_{i}") or "").strip(), tax=(form.get(f"tax_{i}") or "").strip()))
+    lines = [ln for ln in lines if ln.account or ln.debit or ln.credit or ln.description]
     d = parse_date(form.get("date")) if form.get("date") else (default_date or dt.date.today())
     return Journal(date=d, narration=(form.get("narration") or "").strip(), reference=(form.get("reference") or "").strip(),
-                   lines=lines, number=(form.get("number") or "").strip())
+                   lines=lines, number=(form.get("number") or "").strip(),
+                   amounts="exclusive" if form.get("amounts") == "exclusive" else "")
 
 
 __all__ = ["Ledger", "LedgerError", "ValidationError", "ChartError", "journal_from_form"]

@@ -1,8 +1,8 @@
 {% extends "base.html" %}{% import "_macros.html" as m with context %}
-{% block title %}Account transactions{% endblock %}
+{% block title %}General ledger detail{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><h1>Account transactions</h1><p class="muted">{{ start|longdate }} to {{ end|longdate }}</p></div>
+  <div><h1>General ledger detail</h1><p class="muted">Account transactions, {{ start|longdate }} to {{ end|longdate }}</p></div>
   <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="actions">
     {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="general_ledger">
     <input type="hidden" name="start" value="{{ start|dmy }}"><input type="hidden" name="end" value="{{ end|dmy }}">

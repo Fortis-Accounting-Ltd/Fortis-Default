@@ -31,10 +31,10 @@
     });
   });
 
-  // confirmation before destructive actions; keep the clicked button's value; stop double submits
+  // confirmation before destructive actions (on the form, or on the button pressed); stop double submits
   document.querySelectorAll("form").forEach(function (form) {
     form.addEventListener("submit", function (ev) {
-      var msg = form.getAttribute("data-confirm");
+      var msg = (ev.submitter && ev.submitter.getAttribute("data-confirm")) || form.getAttribute("data-confirm");
       if (msg && !window.confirm(msg)) { ev.preventDefault(); return; }
       // the clicked button's name/value is already in the submitted data; disabling afterwards is safe
       if ((form.method || "").toLowerCase() === "post") {
@@ -136,33 +136,185 @@
     }, 60000);
   }
 
-  // journal editor: live totals, add / remove lines, account names
+  // the client's accounts: code -> [name, default tax rate]; the New account pop-up adds to it
+  var accounts = {};
+  var infoEl = document.getElementById("account-info");
+  if (infoEl) { try { accounts = JSON.parse(infoEl.textContent); } catch (e) { accounts = {}; } }
+  function accountCode(input) { return input.value.trim().split(" ")[0]; }
+  function showName(input) {
+    var span = input.parentNode.querySelector(".acct-name");
+    var code = accountCode(input);
+    if (span) span.textContent = accounts[code] ? accounts[code][0] : (code ? "not in the chart" : "");
+  }
+
+  // "New account" pop-up: account type, number and name (and tax rate); the new account fills the field it was opened for
+  var dialog = document.getElementById("new-account");
+  var lastAccountInput = null;
+  document.addEventListener("focusin", function (ev) {
+    if (ev.target.matches && ev.target.matches("input.account")) lastAccountInput = ev.target;
+  });
+  if (dialog && typeof dialog.showModal === "function") {
+    var naForm = document.getElementById("new-account-form");
+    var naType = document.getElementById("na-type"), naTax = document.getElementById("na-tax");
+    var naRc = document.getElementById("na-rc"), naError = document.getElementById("na-error");
+    var defaults = {};
+    try { defaults = JSON.parse(document.getElementById("type-defaults").textContent); } catch (e) { defaults = {}; }
+    var naTarget = null;
+    var applyType = function () {
+      var d = defaults[naType.value] || {};
+      naRc.placeholder = d.report_code ? d.report_code + " (from the account type)" : "From the account type";
+      if (naTax && d.tax) naTax.value = d.tax;
+    };
+    naType.addEventListener("change", applyType);
+    document.querySelectorAll("[data-new-account]").forEach(function (btn) {
+      btn.classList.remove("hidden");
+      btn.addEventListener("click", function () {
+        var t = btn.getAttribute("data-target");
+        naTarget = t ? document.getElementById(t) : lastAccountInput;
+        naForm.reset();
+        naType.value = btn.getAttribute("data-type") || "Expense";
+        applyType();
+        naError.classList.add("hidden");
+        dialog.showModal();
+        document.getElementById("na-code").focus();
+      });
+    });
+    dialog.querySelectorAll("[data-close-dialog]").forEach(function (b) {
+      b.addEventListener("click", function () { dialog.close(); });
+    });
+    naForm.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      var submit = naForm.querySelector("button.primary");
+      submit.disabled = true;
+      fetch(naForm.action, { method: "POST", body: new FormData(naForm), credentials: "same-origin",
+                             headers: { "X-Requested-With": "fetch", "Accept": "application/json" } })
+        .then(function (r) {
+          return r.json().catch(function () { return { ok: false, error: "the account could not be added - reload the page and try again" }; });
+        })
+        .then(function (d) {
+          submit.disabled = false;
+          if (!d.ok) { naError.textContent = d.error; naError.classList.remove("hidden"); return; }
+          var a = d.account;
+          accounts[a.code] = [a.name, a.tax];
+          document.querySelectorAll("datalist#dl-accounts").forEach(function (dl) {
+            var o = document.createElement("option");
+            o.value = a.code; o.textContent = a.code + " " + a.name;
+            dl.appendChild(o);
+          });
+          document.querySelectorAll("select[data-account-select]").forEach(function (sel) {
+            var o = document.createElement("option");
+            o.value = a.code; o.textContent = a.code + " " + a.name;
+            sel.appendChild(o);
+          });
+          if (naTarget) {
+            naTarget.value = a.code;
+            naTarget.dispatchEvent(new Event("input", { bubbles: true }));
+            naTarget.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          dialog.close();
+          if (naTarget && naTarget.focus) naTarget.focus();
+        })
+        .catch(function () {
+          submit.disabled = false;
+          naError.textContent = "The account could not be added - is the app still running?";
+          naError.classList.remove("hidden");
+        });
+    }, true);
+  }
+
+  // cash coding: tick a line when it is coded, code the ticked lines at once, Enter moves to the next line
+  var coding = document.getElementById("coding-table");
+  if (coding) {
+    var bar = document.getElementById("bulk-bar"), count = document.getElementById("ticked-count");
+    var picks = function () { return coding.querySelectorAll("tbody input[name=pick]"); };
+    var refresh = function () {
+      var n = 0;
+      picks().forEach(function (p) { if (p.checked) n++; p.closest("tr").classList.toggle("ticked", p.checked); });
+      if (count) count.textContent = n;
+      var btn = document.getElementById("reconcile-btn");
+      if (btn) btn.textContent = n ? "Reconcile " + n + " ticked line" + (n === 1 ? "" : "s") : "Reconcile ticked lines";
+    };
+    var setTax = function (tr, code) {
+      var sel = tr.querySelector("select.tax");
+      if (sel && !sel.getAttribute("data-touched") && accounts[code]) sel.value = accounts[code][1] || "";
+    };
+    if (bar) bar.classList.remove("hidden");
+    coding.querySelectorAll("tbody tr").forEach(function (tr) {
+      var acct = tr.querySelector("input.account"), pick = tr.querySelector("input[name=pick]");
+      var sel = tr.querySelector("select.tax");
+      if (sel) sel.addEventListener("change", function () { sel.setAttribute("data-touched", "1"); pick.checked = true; refresh(); });
+      acct.addEventListener("input", function () { showName(acct); });
+      acct.addEventListener("change", function () {
+        acct.value = accountCode(acct);
+        showName(acct);
+        if (acct.value) { pick.checked = true; setTax(tr, acct.value); }
+        refresh();
+      });
+      acct.addEventListener("keydown", function (ev) {
+        if (ev.key !== "Enter") return;
+        ev.preventDefault();
+        var next = tr.nextElementSibling && tr.nextElementSibling.querySelector("input.account");
+        acct.dispatchEvent(new Event("change", { bubbles: true }));
+        if (next) next.focus();
+      });
+      pick.addEventListener("change", refresh);
+    });
+    var all = document.getElementById("pick-all");
+    if (all) all.addEventListener("change", function () { picks().forEach(function (p) { p.checked = all.checked; }); refresh(); });
+    var apply = document.getElementById("bulk-apply");
+    if (apply) apply.addEventListener("click", function () {
+      var code = accountCode(document.getElementById("bulk-account"));
+      var bulkTax = bar.querySelector("select.bulk-tax");
+      if (!code) { document.getElementById("bulk-account").focus(); return; }
+      picks().forEach(function (p) {
+        if (!p.checked) return;
+        var tr = p.closest("tr"), acct = tr.querySelector("input.account");
+        acct.value = code;
+        showName(acct);
+        var sel = tr.querySelector("select.tax");
+        if (sel && bulkTax && bulkTax.value) { sel.value = bulkTax.value; sel.setAttribute("data-touched", "1"); }
+        else setTax(tr, code);
+      });
+    });
+    refresh();
+  }
+
+  // journal editor: live totals (with GST), add / remove lines, account names
   var lines = document.getElementById("journal-lines");
   if (lines) {
-    var names = {};
-    try { names = JSON.parse(document.getElementById("account-names").textContent); } catch (e) { names = {}; }
+    var rates = {};
+    var ratesEl = document.getElementById("tax-rates");
+    if (ratesEl) { try { rates = JSON.parse(ratesEl.textContent); } catch (e) { rates = {}; } }
+    var amountsSel = document.getElementById("amounts");
     var tbody = lines.querySelector("tbody");
     var tpl = document.getElementById("line-template");
     var next = tbody.querySelectorAll("tr").length;
 
     var totals = function () {
-      var dr = 0, cr = 0, bad = false;
+      var dr = 0, cr = 0, gst = 0, bad = false;
+      var exclusive = amountsSel && amountsSel.value === "exclusive";
       tbody.querySelectorAll("tr").forEach(function (tr) {
         var d = parseAmount(tr.querySelector(".dr").value), c = parseAmount(tr.querySelector(".cr").value);
         if (isNaN(d) || isNaN(c)) { bad = true; return; }
+        var sel = tr.querySelector("select.tax"), rate = sel ? (rates[sel.value] || 0) : 0;
+        if (rate && (d || c) && !(d && c)) {
+          var amt = d || c, g = exclusive ? amt * rate / 100 : amt * rate / (100 + rate);
+          g = Math.round(g * 100) / 100;
+          gst += g;
+          if (exclusive) { if (d) d += g; else c += g; }
+        }
         dr += d; cr += c;
       });
       document.getElementById("total-dr").textContent = money(dr);
       document.getElementById("total-cr").textContent = money(cr);
+      var note = document.getElementById("gst-note");
+      if (note) note.textContent = gst ? "(includes GST " + money(gst) + ")" : "";
       var diff = Math.round((dr - cr) * 100) / 100, el = document.getElementById("difference");
       el.textContent = bad ? "check the amounts" : (diff === 0 ? "Balanced" : money(diff) + (diff > 0 ? " more debits" : " more credits"));
       el.className = "num " + (bad || diff !== 0 ? "bad" : "good");
     };
-    var showName = function (input) {
-      var span = input.parentNode.querySelector(".acct-name");
-      var code = input.value.trim().split(" ")[0];
-      if (span) span.textContent = names[code] || (code ? "not in the chart" : "");
-    };
+    if (amountsSel) amountsSel.addEventListener("change", totals);
     var wire = function (tr) {
       tr.querySelectorAll(".amount").forEach(function (inp) {
         inp.addEventListener("input", totals);
@@ -172,9 +324,19 @@
           totals();
         });
       });
-      var acct = tr.querySelector(".account");
-      acct.addEventListener("change", function () { acct.value = acct.value.trim().split(" ")[0]; showName(acct); });
+      var acct = tr.querySelector(".account"), sel = tr.querySelector("select.tax");
+      acct.addEventListener("change", function () {
+        acct.value = accountCode(acct);
+        showName(acct);
+        // a GST client's line starts with the account's own tax rate (GST free and BAS excluded mean no GST)
+        if (sel && !sel.getAttribute("data-touched") && accounts[acct.value]) {
+          var t = accounts[acct.value][1];
+          sel.value = rates[t] ? t : "";
+          totals();
+        }
+      });
       acct.addEventListener("input", function () { showName(acct); });
+      if (sel) sel.addEventListener("change", function () { sel.setAttribute("data-touched", "1"); totals(); });
       tr.querySelector(".remove-line").addEventListener("click", function () {
         if (tbody.querySelectorAll("tr").length > 2) { tr.remove(); } else { tr.querySelectorAll("input").forEach(function (i) { i.value = ""; }); }
         totals();

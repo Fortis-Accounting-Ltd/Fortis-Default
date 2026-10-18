@@ -116,6 +116,120 @@ def test_post_a_journal_in_the_browser(server, page):
     assert not [e for e in page.errors if "favicon" not in e], page.errors
 
 
+STATEMENT = """Date,Amount,Description,Balance
+15/06/2026,2000.00,DIRECT CREDIT ACME PTY LTD INV 1001,"2,000.00"
+16/06/2026,-55.00,OFFICEWORKS 0123 SYDNEY AU Card xx1234,"1,945.00"
+17/06/2026,-11.00,MONTHLY ACCOUNT FEE,"1,934.00"
+"""
+
+
+def test_bank_statement_cash_coding_and_reports_in_the_browser(server, page, tmp_path):
+    base, lib = server
+    page.goto(f"{base}/?token=tok")
+    page.click(".page-head >> text=New client")
+    page.fill("#name", "Coding Co Pty Ltd")
+    page.select_option("#type", "company")
+    page.check("#gst_registered")
+    page.fill("#first_fy", "2026")
+    page.click("button:has-text('Create client')")
+    page.wait_for_selector("text=Bring in the bank")
+
+    # import a statement: the columns are found, checked on screen, then imported
+    page.click(".nav-item:has-text('Bank')")
+    stmt = tmp_path / "CommBank statement.csv"
+    stmt.write_text(STATEMENT, encoding="utf-8")
+    page.select_option("#stmt-account", "18500")
+    page.set_input_files("#stmt-file", str(stmt))
+    shot(page, "30-bank")
+    page.click("button:has-text('Upload and check')")
+    page.wait_for_selector("h1:has-text('Check the statement')")
+    assert page.locator("select[name=role_0]").input_value() == "date"
+    assert page.locator("select[name=role_1]").input_value() == "amount"
+    shot(page, "31-check-columns")
+    page.click("button:has-text('Import 3 lines')")
+    page.wait_for_selector("text=3 line(s) imported")
+
+    # cash code: one line by the bulk bar, one typed, one to an account made in the pop-up
+    rows = page.locator("#coding-table tbody tr")
+    assert rows.count() == 3
+    rows.nth(0).locator("input[name=pick]").check()
+    page.fill("#bulk-account", "51100")
+    page.click("#bulk-apply")
+    assert rows.nth(0).locator("input.account").input_value() == "51100"
+    assert rows.nth(0).locator("select.tax").input_value() == "GST on Income"
+    rows.nth(1).locator("input.account").fill("72100")
+    rows.nth(1).locator("input.account").press("Enter")              # Enter moves on to the next line
+    assert rows.nth(1).locator("input[name=pick]").is_checked()        # coding a line ticks it
+    assert rows.nth(1).locator("select.tax").input_value() == "GST on Expenses"
+    assert rows.nth(1).locator(".acct-name").inner_text() != ""
+    rows.nth(2).locator("input.account").focus()
+    page.click(".sticky-actions >> text=New account")
+    page.wait_for_selector("#new-account[open]")
+    page.select_option("#na-type", "Expense")
+    assert page.locator("#na-tax").input_value() == "GST on Expenses"
+    page.fill("#na-code", "72510")
+    page.fill("#na-name", "Bank fees")
+    page.select_option("#na-tax", "BAS Excluded")
+    shot(page, "32-new-account")
+    page.click("#new-account-form button:has-text('Add account')")
+    page.wait_for_selector("#new-account", state="hidden")
+    assert rows.nth(2).locator("input.account").input_value() == "72510"
+    assert rows.nth(2).locator(".acct-name").inner_text() == "Bank fees"
+    assert rows.nth(2).locator("select.tax").input_value() == "BAS Excluded"
+    assert page.locator("#reconcile-btn").inner_text() == "Reconcile 3 ticked lines"
+    shot(page, "33-cash-coding")
+    page.click("#reconcile-btn")
+    page.wait_for_selector("text=3 line(s) reconciled")
+    assert page.locator("text=Everything is reconciled").is_visible()
+    page.click(".segmented >> text=Reconciled")
+    assert "B2026-0003" in page.locator("table.grid").inner_text()
+    shot(page, "34-reconciled")
+
+    # the dashboard card: statement and ledger agree
+    page.click(".nav-item:has-text('Overview')")
+    card = page.locator(".bank-card").first
+    assert "All reconciled" in card.inner_text() and "Difference" not in card.inner_text()
+    assert card.locator("dd").first.inner_text().startswith("1,934.00")
+    shot(page, "35-overview-bank")
+
+    # a journal with GST: the GST line is worked out and posted for you
+    page.click(".actions >> text=New journal")
+    page.fill("#narration", "Accrued accounting fee")
+    page.fill("input[name=account_0]", "72930")
+    page.locator("input[name=account_0]").blur()
+    assert page.locator("select[name=tax_0]").input_value() == "GST on Expenses"
+    page.fill("input[name=debit_0]", "110")
+    page.fill("input[name=account_1]", "31300")
+    page.locator("input[name=account_1]").blur()
+    page.fill("input[name=credit_1]", "110")
+    page.locator("input[name=credit_1]").blur()
+    assert page.locator("#difference").inner_text() == "Balanced"
+    assert "GST 10.00" in page.locator("#gst-note").inner_text()
+    shot(page, "36-journal-gst")
+    page.click("button[value=post]")
+    page.wait_for_selector("text=J2026-0001 posted.")
+    assert "GST" in page.locator("table.grid").inner_text() and "100.00" in page.locator("table.grid").inner_text()
+
+    # reports
+    page.click(".nav-item:has-text('Profit and loss')")
+    assert "Net Profit" in page.locator("table.statement").inner_text()
+    shot(page, "37-profit-and-loss")
+    page.click(".nav-item:has-text('Balance sheet')")
+    assert "Total Equity" in page.locator("table.statement").inner_text()
+    shot(page, "38-balance-sheet")
+    page.click(".nav-item:has-text('GST report')")
+    assert "181.82" in page.locator(".cards").inner_text()                 # 1A: GST in the 2,000 received
+    accrual = page.locator(".cards").inner_text()
+    assert "15.00" in accrual                                              # 1B: 5.00 bank + 10.00 journal
+    shot(page, "39-gst-accrual")
+    page.click(".segmented >> text=Cash basis")
+    assert "journal line(s) with a tax rate are left out" in page.locator(".cards").inner_text()
+    shot(page, "40-gst-cash")
+    page.click(".nav-item:has-text('All reports')")
+    shot(page, "41-reports")
+    assert not [e for e in page.errors if "favicon" not in e], page.errors
+
+
 def test_sign_in_and_connect_to_xero_in_the_browser(tmp_path, monkeypatch):
     """The waiting screens carry on by themselves once the browser sign-in finishes (Microsoft 365, then Xero)."""
     from werkzeug.serving import make_server

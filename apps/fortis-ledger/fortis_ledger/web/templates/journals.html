@@ -25,6 +25,7 @@
     <select name="kind" aria-label="Type" data-autosubmit>
       <option value="">All types</option>
       {% for k in ["manual", "import", "opening", "close", "reversal"] %}<option value="{{ k }}"{% if kind == k %} selected{% endif %}>{{ m.kind_label(k) }}</option>{% endfor %}
+      <option value="bank"{% if kind == "bank" %} selected{% endif %}>Bank transactions</option>
     </select>
     <input type="search" name="q" value="{{ q }}" placeholder="Narration, number or account" aria-label="Search journals">
     <button class="btn">Search</button>
@@ -43,7 +44,7 @@
     <td class="num">{{ j.total_debit|money0 }}</td>
   </tr>
   {% else %}
-  <tr><td colspan="6" class="empty">No journals{% if status != "all" or q or kind %} match{% endif %}.</td></tr>
+  <tr><td colspan="6" class="empty">No {{ "bank transactions" if kind == "bank" else "journals" }}{% if status != "all" or q or kind %} match{% endif %}.</td></tr>
   {% endfor %}
   </tbody>
 </table>

@@ -14,6 +14,7 @@ adds a change log per client and a soft edit lock so two people don't change one
     years/<fy>/year.json                year status (locked, lock history)
     years/<fy>/journals/<number>.json   one file per journal
     years/<fy>/reports/                 generated reports
+    bank/<account code>.json            a bank account's imported statement lines and their cash coding
 
 Writes go to a temporary file first and are renamed into place, so the sync client never
 uploads a half-written file.
@@ -36,6 +37,7 @@ from .model import ENTITY_TYPES, Client, Journal, now_iso
 FORMAT = 1
 LOCK_STALE_SECONDS = 15 * 60
 MARKER = "fortis-ledger.json"
+ACCOUNT_CODE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,9}$")
 
 
 class StoreError(Exception):
@@ -117,6 +119,26 @@ class FolderStore:
 
     def chart_path(self, slug: str) -> Path:
         return self.client_dir(slug) / "chart.csv"
+
+    def bank_dir(self, slug: str) -> Path:
+        return self.client_dir(slug) / "bank"
+
+    def bank_path(self, slug: str, code: str) -> Path:
+        if not ACCOUNT_CODE_RE.match(code or "") or code in (".", ".."):
+            raise StoreError(f"bad account code {code!r}")
+        return self.bank_dir(slug) / f"{code}.json"
+
+    def list_bank_accounts(self, slug: str) -> list[str]:
+        """Codes of the accounts with imported bank statements (their own files only, not sync conflict copies)."""
+        d = self.bank_dir(slug)
+        if not d.exists():
+            return []
+        out = []
+        for p in d.glob("*.json"):
+            data = read_json(p, None, quiet=True)
+            if data and data.get("account") == p.stem:
+                out.append(p.stem)
+        return sorted(out)
 
     # ---- set up ------------------------------------------------------------------------- #
     def is_initialised(self) -> bool:
@@ -278,9 +300,18 @@ class FolderStore:
         found = []
         if not root.exists():
             return found
-        expected_top = {"client.json", "chart.csv", "audit.jsonl", "lock.json", "years"}
+        expected_top = {"client.json", "chart.csv", "audit.jsonl", "lock.json", "years", "bank"}
         for p in root.iterdir():
             if p.name not in expected_top and not _ignorable(p.name):
+                found.append(p.relative_to(root).as_posix())
+        bank = self.bank_dir(slug)
+        for p in (bank.iterdir() if bank.exists() else []):
+            if _ignorable(p.name):
+                if p.name.endswith(".tmp") and time.time() - p.stat().st_mtime > 3600:
+                    found.append(p.relative_to(root).as_posix())
+                continue
+            data = read_json(p, None, quiet=True) if p.suffix == ".json" else None
+            if not data or data.get("account") != p.stem:
                 found.append(p.relative_to(root).as_posix())
         for fy in self.list_years(slug):
             yd = self.year_dir(slug, fy)

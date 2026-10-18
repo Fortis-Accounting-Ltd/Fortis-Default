@@ -21,8 +21,8 @@ from flask import (Blueprint, abort, current_app, flash, g, jsonify, redirect, r
                    send_file, session, url_for)
 from werkzeug.utils import secure_filename
 
-from .. import imports, reports, shortcut, xero
-from ..chartbook import ACCOUNT_TYPES, ChartError, ClientChart
+from .. import bank as bankmod, imports, reports, shortcut, statements, xero
+from ..chartbook import ACCOUNT_TYPES, ChartError, ClientChart, default_report_code
 from ..engine import chartlib, describe, report_code_options
 from ..ledger import Ledger, LedgerError, ValidationError, journal_from_form
 from ..model import ENTITY_TYPES, Client, Journal, Line, parse_date
@@ -43,7 +43,9 @@ LOCK_ENDPOINTS = {"ui.lock_heartbeat", "ui.lock_take", "ui.lock_release"}
 EDITABLE_KINDS = {"manual", "reversal", "opening"}
 HEARTBEAT_WRITE_SECONDS = 60
 REPORT_TITLES = {"financial_reports": "Financial Reports", "trial_balance": "Trial Balance",
-                 "general_ledger": "General Ledger", "journal_report": "Journal Report"}
+                 "profit_and_loss": "Profit and Loss", "balance_sheet": "Balance Sheet",
+                 "general_ledger": "General Ledger Detail", "gst_report": "GST Report",
+                 "journal_report": "Journal Report"}
 CLIENT_TEXT_FIELDS = ("legal_name", "abn", "trustee", "trustee_type", "business_name", "proprietor",
                       "compiled_by", "notes")
 # report options with their own control on the Client details screen; the rest are edited as JSON
@@ -141,11 +143,24 @@ def account_choices(L: Ledger) -> list:
 
 
 def used_accounts(L: Ledger) -> set[str]:
-    used = set()
+    used = set(store().list_bank_accounts(L.slug))          # an account with a bank statement is in use
     for fy in L.years():
         for j in L.journals(fy, statuses=None):
             used.update(ln.account for ln in j.lines)
     return used
+
+
+def new_account_ctx(L: Ledger) -> dict:
+    """What the 'New account' pop-up needs: account types, each type's report code and tax rate, the codes."""
+    gst = bool(L.client.gst_registered)
+    return {"acct_types": ACCOUNT_TYPES, "tax_choices": bankmod.TAX_CHOICES, "codes": report_code_options(),
+            "type_defaults": {t: {"report_code": default_report_code(t), "tax": bankmod.tax_for_type(t, gst)}
+                              for t in ACCOUNT_TYPES}}
+
+
+def account_info(L: Ledger) -> dict:
+    """code -> [name, the tax rate it is coded with by default] for the account inputs."""
+    return {a.code: [a.name, bankmod.default_tax(a)] for a in L.chart.accounts}
 
 
 def open_path(p: Path, folder: bool = False) -> None:
@@ -248,8 +263,10 @@ TAB_OF = {"ui.overview": "overview", "ui.journals": "journals", "ui.journal_new"
           "ui.journal_view": "journals", "ui.journal_save": "journals", "ui.accounts": "accounts",
           "ui.account_edit": "accounts", "ui.account_add": "accounts", "ui.import_start": "import",
           "ui.import_review": "import", "ui.trial_balance": "tb", "ui.account_transactions": "gl",
+          "ui.profit_and_loss": "pl", "ui.balance_sheet": "bs", "ui.gst_page": "gst",
           "ui.reports_page": "reports", "ui.year_end": "year_end", "ui.change_log": "changes",
-          "ui.client_details": "details", "ui.migrated": "overview"}
+          "ui.client_details": "details", "ui.migrated": "overview", "ui.bank": "bank", "ui.bank_columns": "bank",
+          "ui.bank_account": "bank"}
 
 
 @bp.app_context_processor
@@ -293,6 +310,16 @@ def _store_error(e):
 
 @bp.app_errorhandler(ChartError)
 def _chart_error(e):
+    return _error_back([str(e)])
+
+
+@bp.app_errorhandler(bankmod.BankError)
+def _bank_error(e):
+    return _error_back([str(e)])
+
+
+@bp.app_errorhandler(statements.StatementError)
+def _statement_error(e):
     return _error_back([str(e)])
 
 
@@ -363,7 +390,8 @@ def client_new():
         try:
             month, day = fy_end_from_form(f)
             c = store().create_client((f.get("name") or "").strip(), f.get("type") or "", fy_end_month=month,
-                                      fy_end_day=day, **client_fields_from_form(f))
+                                      fy_end_day=day, gst_registered=f.get("gst_registered") == "yes",
+                                      **client_fields_from_form(f))
         except (StoreError, ValueError) as e:
             flash(str(e), "error")
             return render_template("client_form.html", new=True, form=f, default_fy=today_fy)
@@ -424,7 +452,7 @@ def overview(slug):
     settings().touch_client(slug)
     years = []
     for fy in reversed(g.years):
-        js = L.journals(fy, statuses=None)
+        js = L.journals(fy, statuses=None, bank=False)
         tb = L.trial_balance(fy)
         cs = L.close_status(fy)
         years.append({"fy": fy, "range": L.fy_range(fy), "locked": L.is_locked(fy), "difference": tb["difference"],
@@ -432,7 +460,7 @@ def overview(slug):
                       "drafts": sum(j.status == "draft" for j in js), "close": cs})
     figures = key_figures(L, g.fy) if g.fy in g.years else None
     return render_template("overview.html", year_rows=years, figures=figures, conflicts=store().conflicts(slug),
-                           activity=store().read_audit(slug, limit=8))
+                           activity=store().read_audit(slug, limit=8), banks=bankmod.summaries(L, g.fy))
 
 
 @bp.route("/c/<slug>/years/start", methods=["POST"])
@@ -500,6 +528,7 @@ def client_details(slug):
             setattr(c, k, v)
         c.retained_earnings_account = f.get("retained_earnings_account") or ""
         c.rounding_account = f.get("rounding_account") or ""
+        c.gst_registered = f.get("gst_registered") == "yes"
         opts = {k: v for k, v in extra.items() if k not in opts_known}
         for key in OPTION_CHOICES:
             v = f.get(f"opt_{key}") or ""
@@ -588,20 +617,29 @@ def _amount_text(d) -> str:
 
 
 def _form_lines(j: Journal, minimum: int = 4, extra: int = 2) -> list[dict]:
-    lines = [{"account": ln.account, "description": ln.description, "debit": _amount_text(ln.debit),
-              "credit": _amount_text(ln.credit)} for ln in j.lines]
-    while len(lines) < max(minimum, len(j.lines) + extra):
-        lines.append({"account": "", "description": "", "debit": "", "credit": ""})
+    """The journal's lines as typed: without the automatic GST lines, GST-inclusive amounts back to gross."""
+    lines = []
+    for ln in j.lines:
+        if ln.auto:
+            continue
+        add = ln.gst if ln.gst and j.amounts != "exclusive" else ZERO
+        lines.append({"account": ln.account, "description": ln.description, "tax": ln.tax,
+                      "debit": _amount_text(ln.debit + add if ln.debit else ln.debit),
+                      "credit": _amount_text(ln.credit + add if ln.credit else ln.credit)})
+    target = max(minimum, len(lines) + extra)
+    while len(lines) < target:
+        lines.append({"account": "", "description": "", "debit": "", "credit": "", "tax": ""})
     return lines
 
 
 def _raw_lines(form) -> list[dict]:
-    idx = sorted({int(k.split("_")[1]) for k in form if re.fullmatch(r"(account|debit|credit|desc)_\d+", k)})
+    idx = sorted({int(k.split("_")[1]) for k in form if re.fullmatch(r"(account|debit|credit|desc|tax)_\d+", k)})
     rows = [{"account": form.get(f"account_{i}", ""), "description": form.get(f"desc_{i}", ""),
-             "debit": form.get(f"debit_{i}", ""), "credit": form.get(f"credit_{i}", "")} for i in idx]
-    rows = [r for r in rows if any(v.strip() for v in r.values())]
+             "debit": form.get(f"debit_{i}", ""), "credit": form.get(f"credit_{i}", ""), "tax": form.get(f"tax_{i}", "")}
+            for i in idx]
+    rows = [r for r in rows if any(v.strip() for k, v in r.items() if k != "tax")]
     while len(rows) < 4:
-        rows.append({"account": "", "description": "", "debit": "", "credit": ""})
+        rows.append({"account": "", "description": "", "debit": "", "credit": "", "tax": ""})
     return rows
 
 
@@ -610,7 +648,9 @@ def _editor(j: Journal, jfy: int, new: bool, errors=None, lines=None, date_text=
     return render_template("journal_edit.html", j=j, jfy=jfy, new=new, errors=errors or [],
                            lines=lines or _form_lines(j), accounts=account_choices(L),
                            date_text=date_text if date_text is not None else f"{j.date:%d/%m/%Y}",
-                           names={a.code: a.name for a in L.chart.accounts})
+                           names={a.code: a.name for a in L.chart.accounts}, info=account_info(L),
+                           gst_on=bool(L.client.gst_registered or any(ln.tax for ln in j.lines)),
+                           rates=bankmod.TAX_RATES, **new_account_ctx(L))
 
 
 @bp.route("/c/<slug>/journals")
@@ -619,7 +659,7 @@ def journals(slug):
     status = request.args.get("status") or "all"
     kind = request.args.get("kind") or ""
     q = (request.args.get("q") or "").strip().lower()
-    every = L.journals(g.fy, statuses=None) if g.fy in g.years else []
+    every = L.journals(g.fy, statuses=None, bank=kind == "bank") if g.fy in g.years else []
     js = [j for j in every if status == "all" or j.status == status]
     if kind:
         js = [j for j in js if j.kind == kind]
@@ -642,8 +682,9 @@ def journal_new(slug):
     m = re.fullmatch(r"(\d{4})/([A-Za-z0-9-]{1,30})", src)
     if m:
         o = L.get_journal(int(m.group(1)), m.group(2))
-        j.narration, j.reference = o.narration, o.reference
-        j.lines = [Line(ln.account, debit=ln.debit, credit=ln.credit, description=ln.description) for ln in o.lines]
+        j.narration, j.reference, j.amounts = o.narration, o.reference, o.amounts
+        j.lines = [Line(ln.account, debit=ln.debit, credit=ln.credit, description=ln.description, tax=ln.tax,
+                        gst=ln.gst) for ln in o.lines if not ln.auto]
         j.date = min(max(o.date, L.fy_range(g.fy)[0]), L.fy_range(g.fy)[1])
     return _editor(j, g.fy, new=True)
 
@@ -661,7 +702,7 @@ def journal_view(slug, jfy, number):
     accounts = {a.code: a for a in L.chart.accounts}
     reverse_on = L.fy_range(jfy + 1)[0] if j.date == L.fy_range(jfy)[1] else j.date
     return render_template("journal_view.html", j=j, jfy=jfy, editable=editable, accounts=accounts,
-                           reverse_on=reverse_on)
+                           reverse_on=reverse_on, has_tax=any(ln.tax or ln.auto for ln in j.lines))
 
 
 @bp.route("/c/<slug>/journals/save", methods=["POST"])
@@ -697,6 +738,8 @@ def journal_save(slug):
                    + (f" - roll FY{max(g.years)} forward at Year end first." if later else "."))
             return _editor(j, jfy, new=True, errors=[msg], lines=raw)
     try:
+        if any(ln.tax for ln in j.lines):
+            L.apply_gst(j)              # GST lines to the GST account; inclusive amounts cut back to net
         j = L.save_journal(j, fy, post=post)
     except ValidationError as e:
         return _editor(j, fy, new=not number, errors=e.errors, lines=raw)
@@ -772,6 +815,35 @@ def account_add(slug):
     store().audit(slug, "account.added", {"code": a.code, "name": a.name, "report_code": a.report_code, "type": a.type})
     flash(f"Account {a.code} {a.name} added - it prints in {describe(a.report_code, a.name)}.", "ok")
     return redirect(url_for("ui.accounts", slug=slug) + f"#a-{a.code}")
+
+
+@bp.route("/c/<slug>/accounts/quick-add", methods=["POST"])
+def account_quick_add(slug):
+    """The 'New account' pop-up: type, number and name (and tax rate) - answered as JSON for the page's script."""
+    L = g.ledger
+    f = request.form
+    as_json = request.headers.get("X-Requested-With") == "fetch"
+    acct_type = (f.get("type") or "").strip()
+    rc = (f.get("report_code") or "").strip().split(" ")[0] or default_report_code(acct_type)
+    tax = f.get("tax") or ""
+    if tax not in bankmod.TAX_RATES:
+        tax = bankmod.tax_for_type(acct_type, L.client.gst_registered)
+    try:
+        if acct_type not in ACCOUNT_TYPES:
+            raise ChartError("choose the account type")
+        a = L.chart.add(f.get("code", ""), f.get("name", ""), rc, acct_type, tax_code=tax)
+    except ChartError as e:
+        if as_json:
+            return jsonify({"ok": False, "error": str(e)}), 400
+        flash(f"The account was not added: {e}", "error")
+        return redirect(_safe_next(f.get("next")))
+    store().audit(slug, "account.added", {"code": a.code, "name": a.name, "report_code": a.report_code,
+                                          "type": a.type, "tax": a.tax_code})
+    if as_json:
+        return jsonify({"ok": True, "account": {"code": a.code, "name": a.name, "type": a.type,
+                                                "report_code": a.report_code, "tax": bankmod.default_tax(a)}})
+    flash(f"Account {a.code} {a.name} added.", "ok")
+    return redirect(_safe_next(f.get("next")))
 
 
 @bp.route("/c/<slug>/accounts/<code>", methods=["GET", "POST"])
@@ -1074,6 +1146,56 @@ def account_transactions(slug):
     return render_template("gl.html", data=data, code=code, start=start, end=end, accounts=account_choices(L))
 
 
+def _period(default_start: dt.date, default_end: dt.date) -> tuple[dt.date, dt.date]:
+    start, end = arg_date("start", default_start), arg_date("end", default_end)
+    return (start, end) if start <= end else (default_start, default_end)
+
+
+@bp.route("/c/<slug>/profit-and-loss")
+def profit_and_loss(slug):
+    L = g.ledger
+    if g.fy not in g.years:
+        return render_template("not_started.html")
+    start, end = _period(*L.fy_range(g.fy))
+    compare = request.args.get("compare", "yes") == "yes"
+    try:
+        data = statements.profit_and_loss(L, start, end, compare)
+    except statements.StatementError as e:
+        flash(str(e), "error")
+        data = statements.profit_and_loss(L, *L.fy_range(g.fy), compare)
+        start, end = data["start"], data["end"]
+    return render_template("statement.html", data=data, report="profit_and_loss", start=start, end=end,
+                           compare=compare)
+
+
+@bp.route("/c/<slug>/balance-sheet")
+def balance_sheet(slug):
+    L = g.ledger
+    if g.fy not in g.years:
+        return render_template("not_started.html")
+    as_at = arg_date("as_at", L.fy_range(g.fy)[1])
+    compare = request.args.get("compare", "yes") == "yes"
+    try:
+        data = statements.balance_sheet(L, as_at, compare)
+    except statements.StatementError as e:
+        flash(str(e), "error")
+        as_at = L.fy_range(g.fy)[1]
+        data = statements.balance_sheet(L, as_at, compare)
+    return render_template("statement.html", data=data, report="balance_sheet", as_at=as_at, compare=compare)
+
+
+@bp.route("/c/<slug>/gst-report")
+def gst_page(slug):
+    L = g.ledger
+    if g.fy not in g.years:
+        return render_template("not_started.html")
+    start, end = _period(*L.fy_range(g.fy))
+    basis = request.args.get("basis") if request.args.get("basis") in statements.BASES else "accrual"
+    data = statements.gst_report(L, start, end, basis)
+    return render_template("gst.html", data=data, start=start, end=end, basis=basis,
+                           notes=reports.gst_notes(data), bases=statements.BASES)
+
+
 # ---------------------------------------------------------------------------------------- #
 # report files
 # ---------------------------------------------------------------------------------------- #
@@ -1108,7 +1230,9 @@ def report_generate(slug):
     excel = f.get("format") == "xlsx" and kind != "financial_reports"
     stamp = dt.datetime.now().strftime("%Y-%m-%d %H%M%S")
     folder = store().reports_dir(slug, fy)
-    out = folder / f"{REPORT_TITLES[kind]} FY{fy} {stamp}.{'xlsx' if excel else 'pdf'}"
+    basis = f.get("basis") if f.get("basis") in statements.BASES else "accrual"
+    title = REPORT_TITLES[kind] + (f" ({basis} basis)" if kind == "gst_report" else "")
+    out = folder / f"{title} FY{fy} {stamp}.{'xlsx' if excel else 'pdf'}"
     rid = None
     if kind == "financial_reports":
         upto = clamp(arg_date("upto", e), s, e)
@@ -1124,6 +1248,14 @@ def report_generate(slug):
     elif kind == "trial_balance":
         upto = clamp(arg_date("upto", e), s, e)
         reports.trial_balance(L, fy, out, upto=None if upto == e else upto, as_excel=excel)
+    elif kind == "profit_and_loss":
+        start, end = _period(s, e)
+        reports.profit_and_loss(L, out, start, end, compare=f.get("compare", "yes") == "yes", as_excel=excel)
+    elif kind == "balance_sheet":
+        reports.balance_sheet(L, out, arg_date("as_at", e), compare=f.get("compare", "yes") == "yes", as_excel=excel)
+    elif kind == "gst_report":
+        start, end = _period(s, e)
+        reports.gst_report(L, out, start, end, basis=basis, as_excel=excel)
     elif kind == "general_ledger":
         codes = [c for c in re.split(r"[\s,;]+", f.get("codes") or "") if c]
         reports.general_ledger(L, fy, out, start=clamp(arg_date("start", s), s, e), end=clamp(arg_date("end", e), s, e),
@@ -1231,6 +1363,18 @@ def audit_text(entry: dict) -> str:
         return " ".join(str(x) for x in (f"FY{d.get('fy')}" if d.get("fy") else "", d.get("reason", "")) if x)
     if a == "report.generated":
         return d.get("file", "")
+    if a.startswith("bank."):
+        acct = d.get("account", "")
+        if a == "bank.imported":
+            return f"{acct}: {d.get('file', '')} - {d.get('lines', 0)} new line(s), {d.get('duplicates', 0)} already there"
+        if a == "bank.reconciled":
+            nums = d.get("transactions") or []
+            span = f" ({nums[0]}" + (f" to {nums[-1]})" if len(nums) > 1 else ")") if nums else ""
+            return f"{acct}: {d.get('count', 0)} line(s) reconciled{span}"
+        if a == "bank.unreconciled":
+            return f"{acct}: {d.get('transaction', '')} on {d.get('date', '')}, {d.get('amount', '')}" + (
+                f" - reason: {d['reason']}" if d.get("reason") else "")
+        return f"{acct}: {d.get('count', 0)} line(s)" + (f" - reason: {d['reason']}" if d.get("reason") else "")
     return ", ".join(f"{k}: {v}" for k, v in d.items() if not isinstance(v, (list, dict)))[:300]
 
 
