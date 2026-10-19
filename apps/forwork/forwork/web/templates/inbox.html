@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Inbox{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Inbox</h1><p class="muted">Mentions, replies, assignments and automation alerts for you.</p></div>
+  <form method="post" action="{{ url_for('ui.inbox_read') }}">{{ m.csrf_field() }}<button class="btn ghost">{{ m.icon("check") }} Mark all as read</button></form>
+</div>
+{% if notifications %}
+<ul class="note-list big">
+  {% for n in notifications %}
+  <li class="{{ 'unread' if not n.read_at }}">
+    <span class="kind kind-{{ n.kind }}">{{ {"mention": "@", "reply": "↩", "assigned": "→", "automation": "⚡"}.get(n.kind, "•") }}</span>
+    <div>
+      <a href="{{ url_for('ui.item_link', iid=n.item_id) if n.item_id else '#' }}"><strong>{{ n.by_name or "ForWork" }}</strong> {{ n.text }}</a>
+      <div class="muted small">{{ n.board_name or "" }}{% if n.item_name %} · {{ n.item_name }}{% endif %} · {{ n.created_at|when }}</div>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty-state"><span class="feature-icon">{{ m.icon("bell") }}</span><h2>Nothing yet</h2><p>You are told here when someone @mentions you in an update, replies to you, or adds you to an item.</p></div>
+{% endif %}
+{% endblock %}

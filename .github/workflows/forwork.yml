@@ -1,0 +1,58 @@
+name: ForWork
+
+on:
+  push:
+    paths:
+      - "apps/forwork/**"
+      - ".github/workflows/forwork.yml"
+  pull_request:
+    paths:
+      - "apps/forwork/**"
+      - ".github/workflows/forwork.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: apps/forwork
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pyflakes forwork tests
+      - run: python -m pytest -q tests
+
+  browser:
+    needs: test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/forwork
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt playwright
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m pytest -q tests/test_ui_browser.py
+        env:
+          FW_SCREENSHOTS: screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ForWork-screenshots
+          path: apps/forwork/screenshots
+          if-no-files-found: ignore
+          retention-days: 14

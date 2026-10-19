@@ -1,0 +1,13 @@
+# never commit data: databases, attached files, backups, monday.com exports
+forwork-data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.db.gz
+*.json.gz
+monday-export*/
+export/
+secret.key
+forwork.conf
+.pytest_cache/

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Backups{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Backups</h1><p class="muted">A complete copy of ForWork - every board, item, update and attached file - saved to OneDrive. It runs every {{ settings.interval_minutes }} minutes when something has changed, and every night at 2 am regardless.</p></div>
+<form method="post" action="{{ url_for('admin.backups_run') }}">{{ m.csrf_field() }}<button class="btn primary" {{ 'disabled' if running }}>{{ m.icon("cloud") }} {{ "Backing up..." if running else "Back up now" }}</button></form></div>
+{% include "_admin_nav.html" %}
+<section class="panel">
+  <h2>Last backup</h2>
+  {% if status.last_run %}
+  <p>{% if status.last_ok %}<span class="ok-text">{{ m.icon("check") }} Worked</span>{% else %}<span class="err-text">{{ m.icon("alert") }} Had a problem</span>{% endif %}
+     at {{ status.last_run|when }}{% if status.last_file %} - <span class="mono">{{ status.last_file }}</span>{% endif %}</p>
+  {% if status.last_error %}<div class="flash error">{{ m.icon("alert") }}<span>{{ status.last_error }}</span></div>{% endif %}
+  {% if status.targets %}
+  <ul class="target-list">{% for name, t in status.targets.items() %}<li>{% if t.ok %}<span class="ok-text">{{ m.icon("check") }}</span>{% else %}<span class="err-text">{{ m.icon("alert") }}</span>{% endif %} <strong>{{ name }}</strong> <span class="muted small">{{ t.at|when if t.at else "" }}</span>{% if t.error %}<div class="err-text small">{{ t.error }}</div>{% endif %}</li>{% endfor %}</ul>
+  {% endif %}
+  {% else %}<p class="muted">No backup has run yet.</p>{% endif %}
+  {% if not settings.folder and not settings.graph.enabled %}<div class="flash warn">{{ m.icon("alert") }}<span>No OneDrive location is set, so backups are only kept on the server. Set one below.</span></div>{% endif %}
+</section>
+<section class="panel">
+  <h2>Where backups go</h2>
+  <form method="post" action="{{ url_for('admin.backups_settings') }}" class="form-grid">
+    {{ m.csrf_field() }}
+    <fieldset>
+      <legend>OneDrive / SharePoint through Microsoft (recommended for a cloud server)</legend>
+      <label class="check"><input type="checkbox" name="graph_enabled" value="1" {{ 'checked' if settings.graph.enabled }}> Upload backups to OneDrive or SharePoint</label>
+      {% if not graph_ready %}<p class="small err-text">The server's Microsoft app details are not set, so this cannot work yet (SETUP-GUIDE.md step 5).</p>{% endif %}
+      {% set t = settings.graph.target or {} %}
+      <label>Save into
+        <select name="graph_kind">
+          <option value="user" {{ 'selected' if t.kind == 'user' }}>a person's OneDrive</option>
+          <option value="site" {{ 'selected' if t.kind == 'site' }}>a SharePoint site's document library</option>
+          <option value="drive" {{ 'selected' if t.kind == 'drive' }}>a drive by its ID</option>
+        </select></label>
+      <label>OneDrive of (email) <input name="graph_user" value="{{ t.user or '' }}" placeholder="backups@fortisap.com.au"></label>
+      <label>SharePoint site address <input name="graph_site" value="{{ t.site_url or '' }}" placeholder="https://fortisap.sharepoint.com/sites/Fortis"></label>
+      <label>Library <input name="graph_library" value="{{ t.library or 'Documents' }}"></label>
+      <label>Drive ID <input name="graph_drive" value="{{ t.drive_id or '' }}"></label>
+      <label>Folder <input name="graph_folder" value="{{ settings.graph.folder or 'ForWork Backups' }}"></label>
+    </fieldset>
+    <fieldset>
+      <legend>A folder on the server (for an office PC with OneDrive syncing)</legend>
+      <label>Folder <input name="folder" value="{{ settings.folder or '' }}" placeholder="C:\Users\forwork\OneDrive - Fortis Accounting Partners\ForWork Backups"></label>
+      <p class="small muted">OneDrive's sync app uploads whatever lands in this folder.</p>
+    </fieldset>
+    <fieldset>
+      <legend>How often and how long</legend>
+      <label>Back up every (minutes, when something changed) <input type="number" name="interval_minutes" min="5" max="1440" value="{{ settings.interval_minutes }}"></label>
+      <label>Keep every backup for (hours) <input type="number" name="keep_hours" min="1" value="{{ settings.keep.all_hours }}"></label>
+      <label>Then one a day for (days) <input type="number" name="keep_days" min="1" value="{{ settings.keep.daily_days }}"></label>
+      <label>Then one a month for (months) <input type="number" name="keep_months" min="1" value="{{ settings.keep.monthly_months }}"></label>
+    </fieldset>
+    <div><button class="btn primary">Save backup settings</button></div>
+  </form>
+</section>
+<section class="panel">
+  <h2>Backups</h2>
+  <p class="small muted">Each backup is a .db.gz file (the whole database) and a readable .json.gz copy of every board. Restoring puts ForWork back exactly as it was then; the data as it is just before a restore is kept, so a restore can be undone.</p>
+  <table class="list-table">
+    <thead><tr><th>File</th><th>Where</th><th class="right">Size</th><th></th></tr></thead>
+    <tbody>
+    {% for b in backups %}
+    <tr><td class="mono small">{{ b.name }}</td><td class="muted small">{{ b.where }}</td><td class="right small">{{ ((b.size or 0) / 1048576)|round(2) }} MB</td>
+      <td class="nowrap">
+        <a class="btn small ghost" href="{{ url_for('admin.backups_download', name=b.name) }}">{{ m.icon("export") }}</a>
+        {% if b.name.endswith('.db.gz') %}<button class="btn small ghost" type="button" data-restore="{{ b.name }}">Restore</button>{% endif %}
+      </td></tr>
+    {% else %}<tr><td colspan="4" class="muted">No backups yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+<dialog class="dialog" id="restore-dialog">
+  <form method="post" action="{{ url_for('admin.backups_restore') }}">
+    {{ m.csrf_field() }}
+    <h2>Restore a backup</h2>
+    <p>This replaces <strong>everything</strong> in ForWork with <span class="mono" data-restore-name></span>. Changes made since then are set aside (kept in a pre-restore copy on the server).</p>
+    <input type="hidden" name="name" data-restore-input>
+    <label>Type RESTORE to confirm <input name="confirm" autocomplete="off" required></label>
+    <div class="dialog-actions"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn danger">Restore</button></div>
+  </form>
+</dialog>
+{% endblock %}

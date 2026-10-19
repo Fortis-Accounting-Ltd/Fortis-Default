@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Search{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Search</h1>{% if q %}<p class="muted">{{ results|length }}{% if results|length == 100 %}+{% endif %} item{{ "s" if results|length != 1 }} and {{ boards|length }} board{{ "s" if boards|length != 1 }} matching “{{ q }}”</p>{% endif %}</div>
+  <form method="get" class="head-actions">
+    <input type="search" name="q" value="{{ q }}" class="filter-input" placeholder="Search" autofocus>
+    <label class="check"><input type="checkbox" name="archived" value="1" {{ 'checked' if archived }} data-autosubmit> Include archived boards</label>
+  </form>
+</div>
+{% if boards %}
+<section class="panel"><h2>Boards</h2><ul class="board-list">{% for b in boards %}<li><a href="{{ url_for('ui.board', bid=b.id) }}">{{ m.icon("board", "ic sm") }} {{ b.name }}</a>{% if b.state == 'archived' %}<span class="tag">archived</span>{% endif %}</li>{% endfor %}</ul></section>
+{% endif %}
+{% if results %}
+<table class="list-table">
+  <thead><tr><th>Item</th><th>Board</th><th>Group</th><th>Matched</th></tr></thead>
+  <tbody>
+  {% for r in results %}
+  <tr>
+    <td><a href="{{ url_for('ui.item_link', iid=r.id) }}">{{ r.name }}</a>{% if r.parent_id %}<div class="muted small">subitem</div>{% endif %}</td>
+    <td><a class="muted" href="{{ url_for('ui.board', bid=r.board_id) }}">{{ r.board_name }}</a>{% if r.board_state == 'archived' %} <span class="tag">archived</span>{% endif %}</td>
+    <td>{% if r.group_title %}<span class="group-tag" data-c="{{ r.group_color }}">{{ r.group_title }}</span>{% endif %}</td>
+    <td class="muted small">{{ r.hit or "" }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% elif q %}
+<div class="empty-state"><span class="feature-icon">{{ m.icon("search") }}</span><h2>No matches</h2><p>Try fewer words{% if not archived %}, or include archived boards{% endif %}.</p></div>
+{% endif %}
+{% endblock %}

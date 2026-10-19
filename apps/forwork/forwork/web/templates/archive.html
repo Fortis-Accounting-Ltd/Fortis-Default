@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Archived boards{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Archived boards</h1><p class="muted">Past years' boards. Open one to look back, or restore it from its menu.</p></div>
+<input type="search" class="filter-input" placeholder="Filter" data-filter-list="archived-list" aria-label="Filter"></div>
+<div id="archived-list">
+<table class="list-table">
+  <thead><tr><th>Board</th><th>Workspace</th><th class="right">Items</th><th>Last changed</th></tr></thead>
+  <tbody>
+    {% for b in boards %}
+    <tr data-text="{{ b.name|lower }}"><td><a href="{{ url_for('ui.board', bid=b.id) }}">{{ m.icon("board", "ic sm") }} {{ b.name }}</a></td>
+      <td class="muted">{{ workspaces.get(b.workspace_id, "") }}</td><td class="right">{{ b.item_count }}</td><td class="muted">{{ b.updated_at|when }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">No archived boards.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

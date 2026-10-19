@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}People{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>People</h1><p class="muted">Who can use ForWork. Anyone in the firm's Microsoft 365 with a firm email can sign in{% if not config_auto %}{% endif %}; their first sign-in adds them as a member. Admins manage people, backups and imports. Viewers can look but not change anything.</p></div></div>
+{% include "_admin_nav.html" %}
+<section class="panel">
+  <h2>Add someone</h2>
+  <form method="post" action="{{ url_for('admin.people_add') }}" class="inline-form wrap">
+    {{ m.csrf_field() }}
+    <input name="email" type="email" placeholder="name@fortisap.com.au" required>
+    <input name="name" placeholder="Full name">
+    <select name="role">{% for r in roles %}<option value="{{ r }}" {{ 'selected' if r == 'member' }}>{{ r|capitalize }}</option>{% endfor %}</select>
+    <button class="btn primary">Add</button>
+  </form>
+</section>
+<input type="search" class="filter-input" placeholder="Filter people" data-filter-list="people-list" aria-label="Filter people">
+<div id="people-list">
+<table class="list-table">
+  <thead><tr><th>Person</th><th>Email</th><th>Role</th><th>Access</th><th>Last seen</th><th></th></tr></thead>
+  <tbody>
+  {% for u in users %}
+  <tr class="{{ 'inactive' if not u.active }}" data-text="{{ (u.name ~ ' ' ~ u.email)|lower }}">
+    <td>{{ m.avatar(u, "sm") }} {{ u.name }}{% if u.monday_id %} <span class="tag" title="Brought across from monday.com">monday</span>{% endif %}</td>
+    <td class="muted">{{ u.email }}</td>
+    <td>
+      <form method="post" action="{{ url_for('admin.people_change', uid=u.id) }}" class="inline-form">{{ m.csrf_field() }}
+        <select name="role" data-autosubmit>{% for r in roles %}<option value="{{ r }}" {{ 'selected' if r == u.role }}>{{ r|capitalize }}</option>{% endfor %}</select>
+      </form>
+    </td>
+    <td>
+      <form method="post" action="{{ url_for('admin.people_change', uid=u.id) }}" class="inline-form">{{ m.csrf_field() }}
+        {% if u.active %}<button class="btn small ghost" name="active" value="0" data-confirm="Turn off {{ u.name }}'s access? They are signed out straight away.">On - turn off</button>
+        {% else %}<button class="btn small" name="active" value="1">Off - turn on</button>{% endif %}
+      </form>
+    </td>
+    <td class="muted small">{{ u.last_seen|when if u.last_seen else "never" }}</td>
+    <td>{% if sessions.get(u.id) %}<form method="post" action="{{ url_for('admin.people_change', uid=u.id) }}" class="inline-form">{{ m.csrf_field() }}<button class="btn small ghost" name="op" value="signout" title="Sign out of every browser">Sign out ({{ sessions[u.id] }})</button></form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if teams %}<section class="panel"><h2>Teams</h2><ul>{% for t in teams %}<li>{{ t.name }} <span class="muted">({{ t.members|length }} people)</span></li>{% endfor %}</ul></section>{% endif %}
+{% endblock %}

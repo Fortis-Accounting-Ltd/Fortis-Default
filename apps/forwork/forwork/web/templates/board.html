@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ board.name }}{% endblock %}
+{% block body_class %}board-page{% endblock %}
+{% block main_class %}board-main{% endblock %}
+{% block head %}<script src="{{ url_for('static', filename='board.js') }}?v={{ VERSION }}" defer></script>{% endblock %}
+{% block content %}
+<div id="board-app" data-board="{{ board.id }}" data-view="{{ view }}" data-item="{{ open_item }}"
+     data-api="{{ url_for('api.board', bid=board.id) }}" data-state="{{ board.state }}">
+  <div class="board-head">
+    <div class="board-title">
+      <h1 id="board-name" title="Click to rename">{{ board.name }}</h1>
+      <button class="icon-btn star" type="button" id="fav-btn" title="Add to favourites" aria-pressed="false">{{ m.icon("star") }}</button>
+      <details class="menu-wrap" id="board-menu">
+        <summary class="icon-btn" title="Board menu">{{ m.icon("more") }}</summary>
+        <div class="menu right" role="menu">
+          <button type="button" role="menuitem" data-act="describe">{{ m.icon("edit") }} Edit description</button>
+          <button type="button" role="menuitem" data-act="duplicate">{{ m.icon("copy") }} Duplicate board</button>
+          <a role="menuitem" href="{{ url_for('ui.board_export', bid=board.id) }}">{{ m.icon("export") }} Export to Excel</a>
+          <a role="menuitem" href="{{ url_for('ui.board_automations', bid=board.id) }}">{{ m.icon("bolt") }} Automations</a>
+          <a role="menuitem" href="{{ url_for('ui.board_activity', bid=board.id) }}">{{ m.icon("history") }} Activity log</a>
+          <button type="button" role="menuitem" data-act="move">{{ m.icon("folder") }} Move to workspace or folder</button>
+          {% if board.state == 'archived' %}
+          <button type="button" role="menuitem" data-act="restore">{{ m.icon("archive") }} Restore board</button>
+          {% else %}
+          <button type="button" role="menuitem" data-act="archive">{{ m.icon("archive") }} Archive board</button>
+          {% endif %}
+          <button type="button" role="menuitem" class="danger" data-act="delete">{{ m.icon("trash") }} Delete board</button>
+        </div>
+      </details>
+      <span class="spacer"></span>
+      <span class="live-dot" id="live-dot" title="Changes from others appear by themselves"></span>
+      <a class="btn ghost small" href="{{ url_for('ui.board_automations', bid=board.id) }}" id="auto-btn">{{ m.icon("bolt") }} <span>Automations</span></a>
+    </div>
+    <p class="board-desc muted" id="board-desc">{{ board.description }}</p>
+    <div class="crumb muted small">{{ workspace }}{% if board.state == 'archived' %} · <span class="tag">archived</span>{% endif %}</div>
+    {% if board.state == 'archived' %}<div class="flash info">{{ m.icon("archive") }}<span>This board is archived, so it is read only. Restore it from the board menu to change it.</span></div>{% endif %}
+    <nav class="view-tabs" id="view-tabs" aria-label="Views"></nav>
+    <div class="toolbar" id="toolbar"></div>
+  </div>
+  <div class="board-body" id="board"><div class="loading">Loading the board...</div></div>
+</div>
+<aside class="panel-drawer" id="item-panel" aria-label="Item" hidden></aside>
+<div class="popover" id="popover" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<dialog class="dialog" id="dlg"></dialog>
+<template id="column-types">{% for t, label in column_types %}<option value="{{ t }}">{{ label }}</option>{% endfor %}</template>
+{% endblock %}

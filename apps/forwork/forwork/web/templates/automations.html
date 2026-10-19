@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Automations - {{ board.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Automations</h1><p class="muted"><a href="{{ url_for('ui.board', bid=board.id) }}">{{ board.name }}</a> - rules that run by themselves when something changes.</p></div>
+</div>
+<section class="panel">
+  <h2>{{ rules|length }} rule{{ "s" if rules|length != 1 }}</h2>
+  {% if rules %}
+  <ul class="rule-list">
+    {% for r in rules %}
+    <li class="{{ 'off' if not r.active }}">
+      <span class="rule-icon">{{ m.icon("bolt") }}</span>
+      <div class="rule-text"><strong>{{ r.text }}</strong>
+        <div class="muted small">{% if r.imported %}Brought across from monday.com · {% endif %}{% if r.runs %}ran {{ r.runs }} time{{ "s" if r.runs != 1 }}, last {{ r.last_run|when }}{% else %}has not run yet{% endif %}</div></div>
+      <form method="post" action="{{ url_for('ui.automation_change', rid=r.id) }}" class="inline-form">{{ m.csrf_field() }}
+        {% if r.active %}<button class="btn small ghost" name="op" value="off">Turn off</button>{% else %}<button class="btn small" name="op" value="on">Turn on</button>{% endif %}
+        <button class="btn small ghost danger" name="op" value="delete" data-confirm="Delete this automation?">{{ m.icon("trash") }}</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No automations on this board yet.</p>{% endif %}
+</section>
+<section class="panel">
+  <h2>Add an automation</h2>
+  <form method="post" action="{{ url_for('ui.board_automations_save', bid=board.id) }}" class="rule-form" id="rule-form">
+    {{ m.csrf_field() }}
+    <div class="rule-row">
+      <span class="rule-word">When</span>
+      <select name="trigger" data-show-part="t">
+        <option value="status_change">a status changes</option>
+        <option value="item_created">an item is created</option>
+      </select>
+      <span data-part="t" data-when="status_change">
+        <select name="t_column" data-labels-for="t_to">
+          {% for c in status_cols %}<option value="{{ c.id }}">{{ c.title }}</option>{% endfor %}
+        </select>
+        <span class="rule-word">changes to</span>
+        <select name="t_to" data-label-select>
+          <option value="any">anything</option>
+          {% for c in status_cols %}{% for lab in labels_for(c) %}<option value="{{ lab.id }}" data-col="{{ c.id }}">{{ lab.name or "(blank)" }}</option>{% endfor %}{% endfor %}
+        </select>
+      </span>
+    </div>
+    <div class="rule-row">
+      <span class="rule-word">then</span>
+      <select name="action" data-show-part="a">
+        <option value="move_to_group">move the item to a group</option>
+        <option value="set_date_today">set a date to today</option>
+        <option value="set_status">set a status</option>
+        <option value="notify">notify someone</option>
+        <option value="assign_creator">add the item's creator to a people column</option>
+        <option value="archive_item">archive the item</option>
+      </select>
+      <span data-part="a" data-when="move_to_group"><select name="a_group">{% for gr in groups %}<option value="{{ gr.id }}">{{ gr.title }}</option>{% endfor %}</select></span>
+      <span data-part="a" data-when="set_date_today"><select name="a_column_set_date_today">{% for c in columns if c.type == 'date' %}<option value="{{ c.id }}">{{ c.title }}</option>{% endfor %}</select></span>
+      <span data-part="a" data-when="set_status">
+        <select name="a_column_set_status" data-labels-for="a_label">{% for c in status_cols %}<option value="{{ c.id }}">{{ c.title }}</option>{% endfor %}</select>
+        <span class="rule-word">to</span>
+        <select name="a_label" data-label-select>{% for c in status_cols %}{% for lab in labels_for(c) %}<option value="{{ lab.id }}" data-col="{{ c.id }}">{{ lab.name or "(blank)" }}</option>{% endfor %}{% endfor %}</select>
+      </span>
+      <span data-part="a" data-when="notify">
+        <select name="a_column_notify"><option value="">(no column)</option>{% for c in columns if c.type == 'people' %}<option value="{{ c.id }}">the people in {{ c.title }}</option>{% endfor %}</select>
+        <select name="a_users" multiple size="3" title="and/or these people (Ctrl-click for several)">{% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select>
+        <input name="a_text" placeholder="Message" maxlength="300">
+      </span>
+      <span data-part="a" data-when="assign_creator"><select name="a_column_assign_creator">{% for c in columns if c.type == 'people' %}<option value="{{ c.id }}">{{ c.title }}</option>{% endfor %}</select></span>
+    </div>
+    <button class="btn primary">{{ m.icon("plus") }} Add automation</button>
+  </form>
+</section>
+{% endblock %}

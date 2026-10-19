@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest>=8
+pyflakes>=3
+# optional - the real-browser test (tests/test_ui_browser.py) needs:
+#   pip install playwright && python -m playwright install chromium
