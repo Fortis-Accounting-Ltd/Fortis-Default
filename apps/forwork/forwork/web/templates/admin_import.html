@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Import from monday.com{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Import from monday.com</h1><p class="muted">Brings across every board - groups, columns and labels, items and subitems, updates and replies, views and status automations. People are matched by email.</p></div></div>
+{% include "_admin_nav.html" %}
+<div id="import-job" data-job="{{ request.args.get('job', '') }}" data-url="{{ url_for('admin.import_job', job_id='JOB') }}" hidden class="panel">
+  <h2>Import</h2>
+  <p data-job-message>Starting...</p>
+  <progress max="1" value="0" data-job-progress></progress>
+  <div data-job-result></div>
+</div>
+<div class="home-grid">
+<section class="panel">
+  <h2>Straight from monday.com</h2>
+  <form method="post" action="{{ url_for('admin.import_start') }}">
+    {{ m.csrf_field() }}
+    <p class="small">In monday.com: your picture (bottom left) &gt; Developers &gt; My access tokens &gt; Show &gt; Copy. The token is used once for this import and not kept.</p>
+    <label>API token <input type="password" name="token" autocomplete="off" placeholder="{{ 'Using FORWORK_MONDAY_TOKEN from the server settings' if token_set else 'Paste the token' }}"></label>
+    <label class="check"><input type="checkbox" name="replace" value="1"> Replace boards already imported (loads them again from monday.com - changes made to them in ForWork are lost)</label>
+    <button class="btn primary" data-confirm="Import from monday.com now? It takes a few minutes.">{{ m.icon("import") }} Import</button>
+  </form>
+</section>
+<section class="panel">
+  <h2>From an export file</h2>
+  <form method="post" action="{{ url_for('admin.import_start') }}" enctype="multipart/form-data">
+    {{ m.csrf_field() }}
+    <p class="small">A .zip made by <code>python -m forwork pull-monday --zip</code> or with Claude's monday.com connector.</p>
+    <label>Export .zip <input type="file" name="bundle" accept=".zip" required></label>
+    <label class="check"><input type="checkbox" name="replace" value="1"> Replace boards already imported</label>
+    <button class="btn primary">{{ m.icon("import") }} Import file</button>
+  </form>
+</section>
+</div>
+<section class="panel">
+  <h2>Boards already imported ({{ imported|length }})</h2>
+  {% if imported %}
+  <ul class="cols-list">{% for b in imported %}<li>{{ b.name }}{% if b.state != 'active' %} <span class="tag">{{ b.state }}</span>{% endif %}</li>{% endfor %}</ul>
+  {% else %}<p class="muted">None yet.</p>{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}My work{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>My work</h1><p class="muted">{{ total }} item{{ "s" if total != 1 }} on open boards where you are in a people column{% if not include_done %}, not counting finished ones{% endif %}.</p></div>
+  <div class="head-actions">
+    <input type="search" class="filter-input" placeholder="Filter" data-filter-list="work-buckets" aria-label="Filter">
+    {% if include_done %}<a class="btn ghost" href="{{ url_for('ui.my_work') }}">Hide done</a>{% else %}<a class="btn ghost" href="{{ url_for('ui.my_work', done=1) }}">Show done</a>{% endif %}
+  </div>
+</div>
+<div id="work-buckets">
+{% for title, rows in buckets if rows %}
+<section class="bucket {{ 'overdue' if title == 'Overdue' }}">
+  <h2>{{ title }} <span class="count">{{ rows|length }}</span></h2>
+  <table class="list-table">
+    <thead><tr><th>Item</th><th>Board</th><th>Group</th><th>Status</th><th>Date</th></tr></thead>
+    <tbody>
+      {% for w in rows %}
+      <tr data-text="{{ (w.name ~ ' ' ~ w.board_name ~ ' ' ~ (w.group_title or ''))|lower }}">
+        <td><a href="{{ url_for('ui.item_link', iid=w.id) }}">{{ w.name }}</a>{% if w.parent_name %}<div class="muted small">subitem of {{ w.parent_name }}</div>{% endif %}</td>
+        <td><a href="{{ url_for('ui.board', bid=w.board_id) }}" class="muted">{{ w.board_name }}</a></td>
+        <td>{% if w.group_title %}<span class="group-tag" data-c="{{ w.group_color }}">{{ w.group_title }}</span>{% endif %}</td>
+        <td>{{ m.status_chip(w.status) }}</td>
+        <td class="nowrap {{ 'overdue' if w.date and w.date < today }}">{{ w.date|dmy if w.date else "" }}{% if w.date_column %}<div class="muted small">{{ w.date_column }}</div>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<div class="empty-state"><span class="feature-icon">{{ m.icon("check") }}</span><h2>All clear</h2><p>Nothing is assigned to you right now.</p></div>
+{% endfor %}
+</div>
+{% endblock %}

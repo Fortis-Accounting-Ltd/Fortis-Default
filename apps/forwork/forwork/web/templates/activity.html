@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Activity - {{ board.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Activity log</h1><p class="muted"><a href="{{ url_for('ui.board', bid=board.id) }}">{{ board.name }}</a> - every change, who made it and when, newest first.</p></div>
+  <input type="search" class="filter-input" placeholder="Filter" data-filter-list="activity-list" aria-label="Filter">
+</div>
+<div id="activity-list">
+<table class="list-table activity">
+  <thead><tr><th>When</th><th>Who</th><th>Item</th><th>What</th></tr></thead>
+  <tbody>
+  {% for a in rows %}
+  <tr data-text="{{ ((a.user_name or 'automation') ~ ' ' ~ (a.item_name or '') ~ ' ' ~ describe(a))|lower }}">
+    <td class="nowrap muted">{{ a.at|when }}</td>
+    <td class="nowrap">{{ a.user_name or ("Automation" if (a.detail or {}).get("automation") else "ForWork") }}</td>
+    <td>{% if a.item_id and a.item_name %}<a href="{{ url_for('ui.item_link', iid=a.item_id) }}">{{ a.item_name }}</a>{% endif %}</td>
+    <td>{{ describe(a) }}</td>
+  </tr>
+  {% else %}<tr><td colspan="4" class="muted">Nothing has changed yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% if more %}<p><a class="btn ghost" href="{{ url_for('ui.board_activity', bid=board.id, before=more) }}">Older</a></p>{% endif %}
+{% endblock %}

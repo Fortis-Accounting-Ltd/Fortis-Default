@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ greeting }}, {{ me.name.split(" ")[0] }}</h1>
+    <p class="muted">Here is what is on your plate.</p>
+  </div>
+</div>
+<div class="stat-row">
+  <a class="stat {{ 'bad' if counts.overdue }}" href="{{ url_for('ui.my_work') }}"><strong>{{ counts.overdue }}</strong><span>Overdue</span></a>
+  <a class="stat" href="{{ url_for('ui.my_work') }}"><strong>{{ counts.today }}</strong><span>Due today</span></a>
+  <a class="stat" href="{{ url_for('ui.my_work') }}"><strong>{{ counts.week }}</strong><span>Due in the next 7 days</span></a>
+  <a class="stat" href="{{ url_for('ui.my_work') }}"><strong>{{ counts.all }}</strong><span>Open items assigned to you</span></a>
+</div>
+<div class="home-grid">
+  <section class="panel">
+    <div class="panel-head"><h2>{{ m.icon("work") }} My work</h2><a href="{{ url_for('ui.my_work') }}">See all</a></div>
+    {% if work %}
+    <ul class="work-list">
+      {% for w in work %}
+      <li>
+        <a href="{{ url_for('ui.item_link', iid=w.id) }}" class="work-name">{{ w.name }}{% if w.parent_name %} <small class="muted">in {{ w.parent_name }}</small>{% endif %}</a>
+        <span class="muted small">{{ w.board_name }} · {{ w.group_title or "" }}</span>
+        {{ m.status_chip(w.status) }}
+        <span class="due {{ 'overdue' if w.date and w.date < today }}">{{ w.date|dmy if w.date else "" }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Nothing is assigned to you on an open board. Items appear here when you are in one of their people columns.</p>
+    {% endif %}
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>{{ m.icon("bell") }} Inbox</h2><a href="{{ url_for('ui.inbox') }}">See all</a></div>
+    {% if notifications %}
+    <ul class="note-list">
+      {% for n in notifications %}
+      <li class="{{ 'unread' if not n.read_at }}">
+        <a href="{{ url_for('ui.item_link', iid=n.item_id) if n.item_id else url_for('ui.inbox') }}"><strong>{{ n.by_name or "ForWork" }}</strong> {{ n.text }}</a>
+        <span class="muted small">{{ n.board_name or "" }} · {{ n.created_at|when }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">No notifications yet. You are told here when someone mentions you, assigns you, or replies to you.</p>{% endif %}
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>{{ m.icon("history") }} Recently updated boards</h2></div>
+    <ul class="board-list">
+      {% for b in recent %}<li><a href="{{ url_for('ui.board', bid=b.id) }}">{{ m.icon("board", "ic sm") }} {{ b.name }}</a><span class="muted small">{{ b.ws }} · {{ b.updated_at|when }}</span></li>{% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}

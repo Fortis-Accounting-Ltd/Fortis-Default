@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Settings</h1><p class="muted">How this ForWork server is set up. Sign-in and secrets are set on the server (see SETUP-GUIDE.md), not here.</p></div></div>
+{% include "_admin_nav.html" %}
+<div class="home-grid">
+<section class="panel">
+  <h2>{{ m.icon("shield") }} Signing in</h2>
+  <dl class="facts">
+    <dt>Microsoft 365 sign-in</dt><dd>{% if cfg.microsoft_ready %}<span class="ok-text">Set up</span>{% else %}<span class="err-text">Not set up</span> - follow SETUP-GUIDE.md step 3{% endif %}</dd>
+    <dt>Tenant (directory) ID</dt><dd class="mono">{{ cfg.ms_tenant_id or "-" }}</dd>
+    <dt>Application (client) ID</dt><dd class="mono">{{ cfg.ms_client_id or "-" }}</dd>
+    <dt>Client secret</dt><dd>{{ "Set (hidden)" if cfg.ms_client_secret else "Not set" }}</dd>
+    <dt>Firm email domains</dt><dd>{{ cfg.allowed_domains|join(", ") or "any" }}</dd>
+    <dt>Address</dt><dd class="mono">{{ cfg.base_url or request.host_url }}</dd>
+    <dt>Test sign-in</dt><dd>{% if cfg.dev_login %}<span class="err-text">ON (this PC only)</span>{% else %}Off{% endif %}</dd>
+  </dl>
+  <form method="post" action="{{ url_for('admin.settings_save') }}">
+    {{ m.csrf_field() }}
+    <label class="check"><input type="checkbox" name="auto_add" value="1" {{ 'checked' if auto_add }}> Let anyone in the firm's Microsoft 365 sign in (they are added as members the first time)</label>
+    <p class="small muted">Untick to allow only the people listed on the People page.</p>
+    <div class="row-actions">
+      <button class="btn primary">Save</button>
+      <button class="btn ghost danger" name="op" value="signout_all" data-confirm="Sign everyone out of ForWork, including you?">Sign everyone out</button>
+    </div>
+  </form>
+</section>
+<section class="panel">
+  <h2>{{ m.icon("info") }} This server</h2>
+  <dl class="facts">
+    <dt>Version</dt><dd>ForWork {{ VERSION }}</dd>
+    <dt>Data folder</dt><dd class="mono">{{ cfg.data_dir }}</dd>
+    <dt>Database</dt><dd>{{ (db_size / 1048576)|round(1) }} MB</dd>
+    <dt>Boards</dt><dd>{{ counts.boards }}</dd>
+    <dt>Items</dt><dd>{{ counts.items }}</dd>
+    <dt>Updates</dt><dd>{{ counts.updates }}</dd>
+    <dt>People with access</dt><dd>{{ counts.people }}</dd>
+  </dl>
+</section>
+</div>
+{% endblock %}

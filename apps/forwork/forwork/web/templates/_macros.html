@@ -1,0 +1,17 @@
+{% macro icon(name, cls="ic") -%}<svg class="{{ cls }}" aria-hidden="true"><use href="#i-{{ name }}"></use></svg>{%- endmacro %}
+
+{% macro avatar(user, size="") -%}
+<span class="avatar {{ size }}" data-c="{{ user.color or '#579bfc' }}" title="{{ user.name }}">{{ user.name|initials }}</span>
+{%- endmacro %}
+
+{% macro csrf_field() -%}<input type="hidden" name="_csrf" value="{{ csrf }}">{%- endmacro %}
+
+{% macro status_chip(s) -%}
+{% if s %}<span class="chip" data-c="{{ s.color }}">{{ s.name or " " }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro flashes() %}
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in msgs %}<div class="flash {{ cat }}" role="status">{{ icon({"ok": "check", "error": "alert", "warn": "alert"}.get(cat, "info")) }}<span>{{ msg }}</span></div>{% endfor %}
+{% endwith %}
+{% endmacro %}

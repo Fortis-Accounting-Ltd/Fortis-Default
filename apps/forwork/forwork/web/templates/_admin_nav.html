@@ -1,0 +1,7 @@
+<nav class="sub-nav" aria-label="Admin">
+  <a class="{{ 'active' if request.endpoint == 'admin.people' }}" href="{{ url_for('admin.people') }}">{{ m.icon("users") }} People</a>
+  <a class="{{ 'active' if request.endpoint == 'admin.backups' }}" href="{{ url_for('admin.backups') }}">{{ m.icon("cloud") }} Backups</a>
+  <a class="{{ 'active' if request.endpoint == 'admin.import_page' }}" href="{{ url_for('admin.import_page') }}">{{ m.icon("import") }} Import from monday.com</a>
+  <a class="{{ 'active' if request.endpoint == 'admin.bin_page' }}" href="{{ url_for('admin.bin_page') }}">{{ m.icon("trash") }} Bin</a>
+  <a class="{{ 'active' if request.endpoint == 'admin.settings' }}" href="{{ url_for('admin.settings') }}">{{ m.icon("settings") }} Settings</a>
+</nav>

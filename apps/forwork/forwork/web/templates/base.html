@@ -1,0 +1,117 @@
+{% import "_macros.html" as m with context %}<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} | {{ APP_NAME }}</title>
+  <link rel="icon" href="{{ url_for('static', filename='icon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ VERSION }}">
+  <script src="{{ url_for('static', filename='app.js') }}?v={{ VERSION }}" defer></script>
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}" data-csrf="{{ csrf }}"{% if me %} data-me="{{ me.id }}"{% endif %}>
+{% include "_icons.html" %}
+{% block shell %}
+<header class="topbar">
+  <button class="icon-btn nav-toggle" type="button" data-toggle-nav aria-label="Menu">{{ m.icon("board") }}</button>
+  <a class="brand" href="{{ url_for('ui.home') }}" title="ForWork home">
+    <span class="brand-mark" aria-hidden="true">F</span><span class="brand-name">For<b>Work</b></span>
+  </a>
+  <form class="global-search" method="get" action="{{ url_for('ui.search') }}" role="search">
+    {{ m.icon("search") }}<input type="search" name="q" placeholder="Search items, clients, boards" value="{{ request.args.get('q', '') if request.endpoint == 'ui.search' else '' }}" autocomplete="off" aria-label="Search">
+  </form>
+  <span class="spacer"></span>
+  <a class="icon-btn" href="{{ url_for('ui.my_work') }}" title="My work">{{ m.icon("work") }}</a>
+  <a class="icon-btn bell" href="{{ url_for('ui.inbox') }}" title="Inbox" data-unread-badge>{{ m.icon("bell") }}{% if unread %}<span class="badge">{{ unread if unread < 100 else "99+" }}</span>{% endif %}</a>
+  {% if me %}
+  <details class="user-menu">
+    <summary title="{{ me.email }}">{{ m.avatar(me) }}</summary>
+    <div class="menu" role="menu">
+      <div class="menu-head"><strong>{{ me.name }}</strong><small>{{ me.email }}</small><small class="role">{{ me.role|capitalize }}</small></div>
+      {% if is_admin %}
+      <a href="{{ url_for('admin.people') }}" role="menuitem">{{ m.icon("users") }} People</a>
+      <a href="{{ url_for('admin.backups') }}" role="menuitem">{{ m.icon("cloud") }} Backups</a>
+      <a href="{{ url_for('admin.import_page') }}" role="menuitem">{{ m.icon("import") }} Import from monday.com</a>
+      <a href="{{ url_for('admin.settings') }}" role="menuitem">{{ m.icon("settings") }} Settings</a>
+      <a href="{{ url_for('admin.bin_page') }}" role="menuitem">{{ m.icon("trash") }} Bin</a>
+      {% endif %}
+      <form method="post" action="{{ url_for('ui.signout') }}">{{ m.csrf_field() }}<button role="menuitem">{{ m.icon("logout") }} Sign out</button></form>
+    </div>
+  </details>
+  {% endif %}
+</header>
+<div class="shell">
+  <aside class="sidebar" aria-label="Boards">
+    <nav class="side-main">
+      <a class="nav-item {{ 'active' if request.endpoint == 'ui.home' }}" href="{{ url_for('ui.home') }}">{{ m.icon("home") }} Home</a>
+      <a class="nav-item {{ 'active' if request.endpoint == 'ui.my_work' }}" href="{{ url_for('ui.my_work') }}">{{ m.icon("work") }} My work</a>
+      <a class="nav-item {{ 'active' if request.endpoint == 'ui.inbox' }}" href="{{ url_for('ui.inbox') }}">{{ m.icon("bell") }} Inbox{% if unread %}<span class="count">{{ unread }}</span>{% endif %}</a>
+    </nav>
+    {% if nav %}
+    <input class="side-filter" type="search" placeholder="Find a board" data-side-filter aria-label="Find a board">
+    {% if nav.favourites %}
+    <div class="side-section">
+      <div class="side-label">{{ m.icon("star", "ic tiny") }} Favourites</div>
+      {% for b in nav.favourites %}<a class="board-link {{ 'active' if board is defined and board.id == b.id }}" href="{{ url_for('ui.board', bid=b.id) }}" data-name="{{ b.name|lower }}">{{ m.icon("board", "ic sm") }}<span>{{ b.name }}</span></a>{% endfor %}
+    </div>
+    {% endif %}
+    {% for w in nav.workspaces %}
+    <details class="side-section ws" open data-ws="{{ w.ws.id }}">
+      <summary class="side-label">{{ m.icon("down", "ic tiny caret") }}<span class="ws-dot" data-c="{{ ['#0050c8','#00c875','#a25ddc','#fdab3d','#e2445c','#0086c0'][loop.index0 % 6] }}">{{ w.ws.name[:1] }}</span>{{ w.ws.name }}</summary>
+      {% for f in w.folders %}
+      <details class="folder" open>
+        <summary>{{ m.icon("folder", "ic sm") }}<span>{{ f.folder.name }}</span></summary>
+        {% for b in f.boards %}<a class="board-link {{ 'active' if board is defined and board.id == b.id }}" href="{{ url_for('ui.board', bid=b.id) }}" data-name="{{ b.name|lower }}">{{ m.icon("board", "ic sm") }}<span>{{ b.name }}</span></a>{% endfor %}
+        {% if not f.boards %}<span class="side-note">No boards</span>{% endif %}
+      </details>
+      {% endfor %}
+      {% for b in w.boards %}<a class="board-link {{ 'active' if board is defined and board.id == b.id }}" href="{{ url_for('ui.board', bid=b.id) }}" data-name="{{ b.name|lower }}">{{ m.icon("board", "ic sm") }}<span>{{ b.name }}</span></a>{% endfor %}
+    </details>
+    {% endfor %}
+    <div class="side-actions">
+      <button class="btn ghost small" type="button" data-dialog="new-board">{{ m.icon("plus") }} New board</button>
+      <a class="side-archive" href="{{ url_for('ui.archive') }}">{{ m.icon("archive", "ic sm") }} Archived boards ({{ nav.archived_count }})</a>
+    </div>
+    {% endif %}
+  </aside>
+  <main class="main {% block main_class %}{% endblock %}">
+    {{ m.flashes() }}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% if nav %}
+<dialog class="dialog" id="new-board">
+  <form method="post" action="{{ url_for('ui.board_new') }}">
+    {{ m.csrf_field() }}
+    <h2>New board</h2>
+    <label>Board name <input name="name" required maxlength="200" placeholder="e.g. Annual Compliance 2027-2028" autofocus></label>
+    <label>Workspace
+      <select name="workspace" data-folder-select>
+        {% for w in nav.workspaces %}<option value="{{ w.ws.id }}">{{ w.ws.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Folder
+      <select name="folder">
+        <option value="">(none)</option>
+        {% for w in nav.workspaces %}{% for f in w.folders %}<option value="{{ f.folder.id }}" data-ws="{{ w.ws.id }}">{{ w.ws.name }} / {{ f.folder.name }}</option>{% endfor %}{% endfor %}
+      </select>
+    </label>
+    <p class="muted small">A new board starts with a group and Owner, Status and Due date columns. To start from an existing board (next year's compliance board, say), open that board and choose Duplicate from its menu.</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" data-close>Cancel</button>
+      <button class="btn primary">Create board</button>
+    </div>
+    <details class="more-actions">
+      <summary>Add a workspace or folder</summary>
+      <div class="inline-forms">
+        <button class="btn small" formaction="{{ url_for('ui.workspace_new') }}" formnovalidate data-copy-name>Add workspace with this name</button>
+        <button class="btn small" formaction="{{ url_for('ui.folder_new') }}" formnovalidate data-copy-name>Add folder with this name</button>
+      </div>
+    </details>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

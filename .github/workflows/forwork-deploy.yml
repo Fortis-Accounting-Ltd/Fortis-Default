@@ -1,0 +1,38 @@
+name: ForWork deploy
+
+# Puts apps/forwork on the Azure web app (SETUP-GUIDE.md step 4).  Needs the repository secret
+# AZURE_WEBAPP_PUBLISH_PROFILE and the repository variable FORWORK_AZURE_APP (the web app's name).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test before deploying
+        working-directory: apps/forwork
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pytest -q tests
+      - name: Check the settings are there
+        env:
+          PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          APP: ${{ vars.FORWORK_AZURE_APP }}
+        run: |
+          if [ -z "$PROFILE" ] || [ -z "$APP" ]; then
+            echo "Set the AZURE_WEBAPP_PUBLISH_PROFILE secret and the FORWORK_AZURE_APP variable first (SETUP-GUIDE.md step 4)."
+            exit 1
+          fi
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.FORWORK_AZURE_APP }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: apps/forwork

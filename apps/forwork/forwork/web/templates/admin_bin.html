@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Bin{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Bin</h1><p class="muted">Deleted boards and items. Nothing in ForWork is removed for good from here; restore anything deleted by mistake.</p></div></div>
+{% include "_admin_nav.html" %}
+<section class="panel">
+  <h2>Deleted boards</h2>
+  <table class="list-table"><tbody>
+  {% for b in boards %}
+  <tr><td>{{ b.name }}</td><td class="muted small">{{ b.updated_at|when }}</td>
+    <td class="right"><form method="post" action="{{ url_for('admin.bin_restore') }}">{{ m.csrf_field() }}<button class="btn small" name="board" value="{{ b.id }}">Restore</button></form></td></tr>
+  {% else %}<tr><td class="muted">None.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+<section class="panel">
+  <h2>Deleted items</h2>
+  <table class="list-table"><tbody>
+  {% for i in items %}
+  <tr><td>{{ i.name }}{% if i.parent_id %} <span class="tag">subitem</span>{% endif %}</td><td class="muted"><a href="{{ url_for('ui.board', bid=i.board_id) }}">{{ i.board }}</a></td><td class="muted small">{{ i.updated_at|when }}</td>
+    <td class="right"><form method="post" action="{{ url_for('admin.bin_restore') }}">{{ m.csrf_field() }}<button class="btn small" name="item" value="{{ i.id }}">Restore</button></form></td></tr>
+  {% else %}<tr><td class="muted">None.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}

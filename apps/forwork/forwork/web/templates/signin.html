@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block body_class %}plain{% endblock %}
+{% block shell %}
+<main class="signin">
+  <div class="signin-card">
+    <div class="signin-brand"><span class="brand-mark big" aria-hidden="true">F</span><span class="brand-name big">For<b>Work</b></span></div>
+    <p class="muted">Fortis Accounting Partners' work boards</p>
+    {% if error %}<div class="flash error" role="alert">{{ m.icon("alert") }}<span>{{ error }}</span></div>{% endif %}
+    {% if microsoft %}
+    <a class="btn ms" href="{{ url_for('ui.auth_start', next=next) }}">
+      <svg class="ms-logo" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+      Sign in with Microsoft
+    </a>
+    <p class="small muted">Use your Fortis Microsoft 365 email. Microsoft checks your password and any second step; ForWork never sees your password.</p>
+    {% elif not dev_users %}
+    <div class="flash warn">{{ m.icon("alert") }}<span>Microsoft sign-in is not set up on this server yet. An admin needs to follow SETUP-GUIDE.md (step 3).</span></div>
+    {% endif %}
+    {% if dev_users %}
+    <form class="dev-signin" method="post" action="{{ url_for('ui.dev_signin') }}">
+      <input type="hidden" name="next" value="{{ next }}">
+      <h2>Test sign-in <span class="tag">this PC only</span></h2>
+      <p class="small muted">FORWORK_DEV_LOGIN is on, so you can pick anyone. Never use this on the real server.</p>
+      <select name="user" required>
+        {% for u in dev_users %}<option value="{{ u.id }}">{{ u.name }} ({{ u.email }}, {{ u.role }})</option>{% endfor %}
+      </select>
+      <button class="btn primary">Sign in</button>
+    </form>
+    {% endif %}
+  </div>
+</main>
+{% endblock %}
