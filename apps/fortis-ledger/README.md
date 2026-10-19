@@ -25,7 +25,7 @@ changes the skill. The two are separate from now on: a change to one does not re
 | **Change log** | Every change records who made it, when, on which PC, and what was there before. SharePoint also keeps each file's version history. |
 | **Edit lock** | One person edits a client at a time; others can view it read only. The lock frees itself after 15 minutes if a PC goes away, and someone can take it over. |
 | **Move a client off Xero** | **Connect to Xero** signs in to Xero from the app and brings a client's chart and year-end trial balances straight across (read only), then disconnects it. Or give the app the client's Xero chart export and trial balance exports. Either way, every year's closing balances match Xero. |
-| **Claude** | Claude (the Claude desktop app, or Claude Code) can read a client's ledger and prepare journals on a PC where Fortis Ledger is installed - "journal depreciation of $4,500 for ... at 30 June". It works through the same rules as the screens; journals are drafts for a person to post unless the firm lets Claude post them, and every change is marked *via Claude* in the change log. |
+| **Claude** | Claude (the Claude desktop app, or Claude Code) can read a client's ledger and prepare journals on a PC where Fortis Ledger is installed - "journal depreciation of $4,500 for ... at 30 June". It works through the same rules as the screens; it posts the journals you ask it to post (a partner can turn that off, and Claude then saves drafts for a person to post), and every change is marked *via Claude* in the change log. |
 | **Office sign-in** | Optional: everyone signs in with their Fortis Microsoft 365 email. The change log and the edit lock then show the verified email instead of a typed name. |
 | **Installer** | One file, `Fortis-Ledger-Setup-<version>.exe`, to share with staff. It installs without administrator rights and puts a *Fortis Ledger* icon on the desktop, plus a *Fortis Ledger - Connect to Xero* icon that opens straight at Connect to Xero. |
 
@@ -226,9 +226,9 @@ credits, locked years, GST, the edit lock - and works as the person using that P
 marked **via Claude** in the client's change log, on the journal and in the journal list.
 
 **Set it up:**
-1. A partner decides, in **Firm settings > Claude**, whether Claude can post journals. Off (the default):
-   Claude saves journals as drafts, and a person checks and posts them (*Journals > Draft*). On: Claude posts
-   the journals you ask it to.
+1. *Claude can post journals* is on (**Firm settings > Claude**): Claude posts the journals you ask it to post,
+   and saves a draft when you ask for one. A partner can turn it off; Claude then only saves drafts, and a
+   person checks and posts them (*Journals > Draft*).
 2. On each PC: install Claude Desktop (claude.ai/download), then in Fortis Ledger click **Firm settings >
    Claude > Connect Claude Desktop**. Quit Claude Desktop completely (right-click its icon by the clock >
    Quit) and open it again. Claude asks your permission before it uses Fortis Ledger.

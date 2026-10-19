@@ -77,9 +77,10 @@
           Fortis Ledger is installed. It works through the same rules as these screens, and every change it makes is marked
           <em>via Claude</em> in the client's change log.</p></div></div>
     <h3>What Claude may do (whole firm)</h3>
-    <label class="check"><input type="checkbox" name="can_post" value="yes"{% if (f.get('claude') or {}).get('can_post') %} checked{% endif %}> Claude can post journals</label>
-    <p class="help">Off: Claude saves journals as drafts, and a person checks and posts them (Journals &gt; Draft). On: Claude posts the
-      journals you ask it to post. Either way it can read the ledgers and add accounts, and it can delete only drafts it made itself.</p>
+    <label class="check"><input type="checkbox" name="can_post" value="yes"{% if (f.get('claude') or {}).get('can_post', true) %} checked{% endif %}> Claude can post journals</label>
+    <p class="help">On (the default): Claude posts the journals you ask it to post, and saves a draft when you ask for one. Off: Claude only
+      saves drafts, and a person checks and posts them (Journals &gt; Draft). Either way it can read the ledgers and add accounts, and it
+      can delete only drafts it made itself.</p>
     <div class="actions"><button class="btn primary" name="op" value="claude_save">Save</button></div>
     <h3>This PC</h3>
     <p>{% if claude.current %}<span class="badge ok">{{ m.icon("check") }} Connected to Claude Desktop</span>

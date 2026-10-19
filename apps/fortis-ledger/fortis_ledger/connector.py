@@ -8,8 +8,8 @@ Claude Code on this PC - can look at a client's ledger and draft or post journal
   person who uses Fortis Ledger here, through the same rules as the screens: the client's chart, the
   financial year, debits equal credits, locked years, GST, the edit lock and the change log - where
   every change is marked "via Claude".
-* Journals are saved as drafts for a person to check and post, unless the firm lets Claude post them
-  (Firm settings > Claude).  Claude can only delete drafts it made itself.
+* Claude posts the journals it is asked to post, or saves drafts for a person to check.  A partner can turn
+  posting off (Firm settings > Claude); Claude then only saves drafts.  It can only delete drafts it made.
 * It speaks both eras of MCP: the 2026-07-28 revision (every request carries its protocol version in
   `_meta`; `server/discover`) and the earlier revisions with the `initialize` handshake (2024-11-05 to
   2025-11-25), so it works with older and newer Claude apps alike.
@@ -58,9 +58,11 @@ INSTRUCTIONS = (
     "sole traders). Financial years are named by the year they end: FY2026 is the year ending in 2026 (for a "
     "June year end, 1 July 2025 to 30 June 2026). Find the client with list_clients and the account codes with "
     "get_chart_of_accounts - never guess a code. Look at balances with get_trial_balance or "
-    "get_account_transactions before and after a journal. create_journal saves a draft that a person posts in "
-    "Fortis Ledger, unless the firm lets Claude post journals; always tell the user the journal number and "
-    "whether it is a draft or posted. Amounts are Australian dollars, debits and credits as positive numbers. "
+    "get_account_transactions before and after a journal. create_journal posts the journal when post is true - "
+    "when the user asks for a journal to be posted, entered or put through - and otherwise saves a draft for a "
+    "person to check; if the firm has turned off posting by Claude it always saves a draft. Always tell the user "
+    "the journal number and whether it is a draft or posted. Amounts are Australian dollars, debits and credits "
+    "as positive numbers. "
     "Every change is recorded in the client's change log as made via Claude.")
 
 
@@ -108,7 +110,8 @@ class Workspace:
 
     @property
     def can_post(self) -> bool:
-        return bool((self.firm.get("claude") or {}).get("can_post"))
+        """Claude may post journals unless a partner has turned that off in Firm settings."""
+        return bool((self.firm.get("claude") or {}).get("can_post", True))
 
     def client(self, text: str):
         t = str(text or "").strip()
@@ -488,7 +491,7 @@ def t_create_journal(ws: Workspace, args: dict) -> dict:
         j = L.save_journal(j, fy, post=post)
     out = {"client": L.client.name, **_journal_out(L, j, fy), "where": _where(L, j.number)}
     if wants_post and not post:
-        out["note"] = ("Saved as a draft: this firm has not let Claude post journals (Fortis Ledger > Firm settings > "
+        out["note"] = ("Saved as a draft: this firm has turned off posting by Claude (Fortis Ledger > Firm settings > "
                        "Claude). A person can check it and post it in Fortis Ledger.")
     elif not post:
         out["note"] = "Saved as a draft - it does not affect any balance until it is posted."
@@ -499,7 +502,7 @@ def t_post_journal(ws: Workspace, args: dict) -> dict:
     L = ws.ledger(args.get("client"))
     j, fy = _get_journal(L, args.get("number"), args.get("fy"))
     if not ws.can_post:
-        raise ToolError("This firm has not let Claude post journals (Fortis Ledger > Firm settings > Claude). "
+        raise ToolError("This firm has turned off posting by Claude (Fortis Ledger > Firm settings > Claude). "
                         f"A person can post {j.number} in Fortis Ledger.")
     if j.status != "draft":
         raise ToolError(f"{j.number} is {j.status}, not a draft.")
@@ -624,9 +627,10 @@ TOOLS = [
          "code from the client's chart and a debit or a credit (positive amounts; debits must equal credits). The date "
          "must be in a financial year that has been started and is not locked. For a GST-registered client a line can "
          "have a tax_rate such as 'GST on Expenses': the GST is split out to the GST account automatically, from GST "
-         "inclusive amounts unless amounts is 'exclusive'. The journal is saved as a draft for a person to check and "
-         "post in Fortis Ledger, unless post is true and the firm lets Claude post journals. Returns the journal and "
-         "its number.",
+         "inclusive amounts unless amounts is 'exclusive'. Set post to true to post it straight away - when the user "
+         "asks for the journal to be posted, entered or put through; leave it false to save a draft for a person to "
+         "check first. If the firm has turned off posting by Claude, it is saved as a draft either way. Returns the "
+         "journal and its number.",
          {"client": CLIENT, "date": {"type": "string", "description": DATE},
           "narration": {"type": "string", "description": "What the journal is for, e.g. 'Depreciation for FY2026'."},
           "reference": {"type": "string"},
@@ -638,11 +642,11 @@ TOOLS = [
                              "description": {"type": "string"}, "debit": AMOUNT, "credit": AMOUNT,
                              "tax_rate": {"type": "string", "enum": bankmod.TAX_CHOICES,
                                           "description": "GST-registered clients only; leave out for no GST."}}}},
-          "post": {"type": "boolean", "description": "Post it now (only if the firm lets Claude post journals). "
-                                                     "Default false: saved as a draft."}},
+          "post": {"type": "boolean", "description": "true: post it now. false (the default): save a draft. The firm "
+                                                     "lets Claude post unless a partner has turned it off."}},
          ["client", "date", "narration", "lines"], t_create_journal, read_only=False),
-    Tool("post_journal", "Post a draft journal", "Post a draft journal so it affects the balances - only when the firm "
-         "lets Claude post journals. It is checked first (balanced, accounts, year open).",
+    Tool("post_journal", "Post a draft journal", "Post a draft journal so it affects the balances (unless the firm has "
+         "turned off posting by Claude). It is checked first (balanced, accounts, year open).",
          {"client": CLIENT, "number": {"type": "string", "description": "The draft's number, e.g. J2026-0004."}, "fy": FY},
          ["client", "number"], t_post_journal, read_only=False),
     Tool("delete_draft_journal", "Delete a draft journal", "Delete a draft journal that Claude made (for example one "

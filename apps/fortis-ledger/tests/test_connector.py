@@ -118,7 +118,7 @@ def test_read_tools(conn, lib):
     data, _ = call(conn, "list_clients")
     claude = next(c for c in data["clients"] if c["name"] == "Claude Test Pty Ltd")
     assert claude["financial_years"] == ["FY2025", "FY2026"] and claude["gst_registered"] and claude["year_end"] == "30 June"
-    assert data["claude_can_post_journals"] is False
+    assert data["claude_can_post_journals"] is True                 # on unless a partner turns it off
     chart, _ = call(conn, "get_chart_of_accounts", client="claude test", search="accounting", fy=2025)
     row = next(a for a in chart["accounts"] if a["code"] == "72930")
     assert row["balance"] == "5000.00" and row["tax_rate"] == "GST on Expenses" and chart["gst_account"] == "35010"
@@ -157,11 +157,11 @@ LINES = [{"account": "72930", "debit": 110, "tax_rate": "GST on Expenses", "desc
          {"account": "31300", "credit": "110.00"}]
 
 
-def test_create_journal_is_a_draft_until_the_firm_lets_claude_post(conn, lib):
+def test_claude_posts_unless_a_partner_turns_it_off(conn, lib):
     folder, slug = lib
-    j, err = call(conn, "create_journal", client="Claude Test", date="30/06/2026", narration="Accrued fee", lines=LINES,
-                  post=True)
-    assert not err and j["status"] == "draft" and j["number"] == "J2026-0001" and "has not let Claude post" in j["note"]
+    # a draft when Claude is asked for one (post left out)
+    j, err = call(conn, "create_journal", client="Claude Test", date="30/06/2026", narration="Accrued fee", lines=LINES)
+    assert not err and j["status"] == "draft" and j["number"] == "J2026-0001" and "until it is posted" in j["note"]
     assert [(x["account"], x["debit"], x["credit"]) for x in j["lines"]] == [
         ("72930", "100.00", ""), ("31300", "", "110.00"), ("35010", "10.00", "")]
     L = Ledger(FolderStore(folder), slug)
@@ -171,10 +171,7 @@ def test_create_journal_is_a_draft_until_the_firm_lets_claude_post(conn, lib):
     audit = FolderStore(folder).read_audit(slug)[0]
     assert audit["action"] == "journal.draft_saved" and audit["via"] == "Claude" and audit["user"] == "Alex Citizen"
     assert not (folder / "clients" / slug / "lock.json").exists()          # the lock Claude took is handed back
-    msg, err = call(conn, "post_journal", client="Claude Test", number="J2026-0001")
-    assert err and "has not let Claude post" in msg
-    # the firm lets Claude post
-    FolderStore(folder).save_firm_settings({"claude": {"can_post": True}})
+    # posting is on unless a partner turns it off
     j, err = call(conn, "post_journal", client="Claude Test", number="J2026-0001")
     assert not err and j["status"] == "posted" and j["changed"]["via"] == "Claude"
     j2, err = call(conn, "create_journal", client="Claude Test", date="2026-06-30", narration="Laptop", amounts="exclusive",
@@ -186,6 +183,14 @@ def test_create_journal_is_a_draft_until_the_firm_lets_claude_post(conn, lib):
     assert bal["31300"] == Decimal("-1210.00")
     msg, err = call(conn, "post_journal", client="Claude Test", number="J2026-0002")
     assert err and "is posted, not a draft" in msg
+    # a partner turns posting off: Claude only saves drafts
+    FolderStore(folder).save_firm_settings({"claude": {"can_post": False}})
+    j3, err = call(conn, "create_journal", client="Claude Test", date="30/06/2026", narration="After hours",
+                   lines=LINES, post=True)
+    assert not err and j3["status"] == "draft" and "turned off posting by Claude" in j3["note"]
+    msg, err = call(conn, "post_journal", client="Claude Test", number=j3["number"])
+    assert err and "turned off posting by Claude" in msg
+    assert call(conn, "list_clients")[0]["claude_can_post_journals"] is False
 
 
 def test_create_journal_follows_the_ledger_rules(conn, lib):

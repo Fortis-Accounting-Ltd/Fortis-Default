@@ -718,10 +718,12 @@ def test_claude_settings_and_what_claude_did(web, company, lib, tmp_path, monkey
     monkeypatch.setenv("FORTIS_LEDGER_CLAUDE_CONFIG", str(cfg))
     page = text(web.get("/firm"))
     assert "Claude can post journals" in page and "Not connected" in page and "claude mcp add --scope user fortis-ledger" in page
+    assert 'name="can_post" value="yes" checked' in page          # on unless a partner turns it off
     assert post(web, "/firm", {"op": "claude_save", "can_post": "yes"}).status_code == 302
     assert store_for(lib).firm_settings()["claude"] == {"can_post": True}
     post(web, "/firm", {"op": "claude_save"})
     assert store_for(lib).firm_settings()["claude"] == {"can_post": False}
+    assert 'name="can_post" value="yes" checked' not in text(web.get("/firm"))
     post(web, "/firm", {"op": "claude_connect"})
     assert any("Quit Claude Desktop completely" in m for m in flashes(web))
     assert json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]["fortis-ledger"]["args"][-1] == "--mcp"
