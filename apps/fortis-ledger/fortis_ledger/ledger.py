@@ -246,6 +246,8 @@ class Ledger:
             if errors:
                 raise ValidationError(errors)
         stamp = {"by": self.store.user, "at": now_iso()}
+        if getattr(self.store, "agent", ""):
+            stamp["via"] = self.store.agent
         if existing:
             j.uid, j.created = existing.uid, existing.created
             j.updated = stamp

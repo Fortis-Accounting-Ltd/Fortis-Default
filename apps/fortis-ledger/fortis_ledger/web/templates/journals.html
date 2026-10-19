@@ -38,7 +38,8 @@
   <tr class="{{ j.status }}">
     <td class="nowrap">{{ j.date|dmy }}</td>
     <td class="nowrap"><a href="{{ url_for('ui.journal_view', slug=client.slug, jfy=fy, number=j.number) }}">{{ j.number }}</a></td>
-    <td>{{ j.narration or "(no narration)" }}{% if j.reference %} <span class="muted">· {{ j.reference }}</span>{% endif %}</td>
+    <td>{{ j.narration or "(no narration)" }}{% if j.reference %} <span class="muted">· {{ j.reference }}</span>{% endif %}
+      {% if (j.created or {}).get("via") %} <span class="badge info" title="Made by Claude for {{ j.created.get('by') }}">{{ m.icon("spark") }} Claude</span>{% endif %}</td>
     <td class="nowrap">{{ m.kind_label(j.kind) }}</td>
     <td>{{ m.status_badge(j) }}{% if j.reversed_by %} <span class="muted small">reversed by {{ j.reversed_by }}</span>{% endif %}</td>
     <td class="num">{{ j.total_debit|money0 }}</td>

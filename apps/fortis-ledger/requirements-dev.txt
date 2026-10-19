@@ -3,5 +3,7 @@ pytest>=8
 pypdf>=4
 pyflakes>=3
 pyinstaller>=6.0
+# the official MCP client, to test the Claude connector against it (not part of the app)
+mcp>=2.0
 # optional - the real-browser test (tests/test_ui_browser.py) needs:
 #   pip install playwright && python -m playwright install chromium

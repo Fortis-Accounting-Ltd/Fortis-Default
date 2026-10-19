@@ -5,6 +5,10 @@
   <h1>{% if new %}New journal{% else %}{{ j.number }} {{ m.status_badge(j) }}{% endif %} <span class="muted">FY{{ jfy }}</span></h1>
   {% if not new %}<div class="actions"><a class="btn" href="{{ url_for('ui.journal_view', slug=client.slug, jfy=jfy, number=j.number) }}">Cancel</a></div>{% endif %}
 </div>
+{% if not new and j.created.get("via") %}
+<div class="flash info">{{ m.icon("spark") }}<span>Drafted by {{ j.created.get("via") }} for {{ j.created.get("by") }} on {{ j.created.get("at")|when }}.
+  {% if j.status == "draft" %}Check the accounts and amounts, then Post.{% endif %}</span></div>
+{% endif %}
 {% if errors %}
 <div class="flash error" role="alert"><strong>The journal was not {% if new %}saved{% else %}changed{% endif %}:</strong>
   <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>

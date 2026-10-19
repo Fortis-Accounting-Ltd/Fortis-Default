@@ -2,13 +2,15 @@
 End-to-end check of an installed copy - `Fortis Ledger.exe --self-test`.  For each entity type it
 sets up a client in a temporary folder, posts a journal, rolls the year forward and produces the
 Financial Reports and a Trial Balance.  It imports and cash codes a bank statement (with GST) and
-produces the Profit and Loss, Balance Sheet and GST report.  Then it opens the main screens, so a
-template or icon missing from the package shows up here.  Exit code 0 means everything worked; the details go to self-test.txt
+produces the Profit and Loss, Balance Sheet and GST report.  It asks the Claude connector, as Claude would,
+to draft a journal.  Then it opens the main screens, so a template or icon missing from the package shows
+up here.  Exit code 0 means everything worked; the details go to self-test.txt
 in the settings folder (a windowed build has no console).
 """
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 import tempfile
 import traceback
@@ -65,6 +67,13 @@ def run() -> int:
         except Exception:
             ok = False
             out.append(f"bank: FAILED\n{traceback.format_exc()}")
+        try:
+            good, detail = _claude(st, Path(d))
+            ok &= good
+            out.append(f"claude: {'ok' if good else 'FAILED'} - {detail}")
+        except Exception:
+            ok = False
+            out.append(f"claude: FAILED\n{traceback.format_exc()}")
         try:
             bad = _screens(Path(d))
             ok &= not bad
@@ -126,6 +135,44 @@ def _bank(st, d: Path) -> tuple[bool, str]:
             and bs["out_by"] == 0 and files)
     return good, (f"{len(lines)} lines read, {len(res['done'])} reconciled, net GST {net}, balance sheet out by "
                   f"{bs['out_by']}" + ("" if files else ", report files missing"))
+
+
+def _claude(st, d: Path) -> tuple[bool, str]:
+    """The Claude connector: both MCP handshakes, the tool list, and a GST journal drafted into a client."""
+    from .connector import Connector
+    from .settings import Settings
+
+    client = next(c for c in st.list_clients() if c.name == "Self Test Bank")
+    st.release_lock(client.slug)              # Claude (another program on this PC) can then take it
+    conn = Connector(Settings(data_folder=str(d / "library"), user_name="self-test"))
+    modern = {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}}
+    init = conn.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}})
+    found = conn.handle({"jsonrpc": "2.0", "id": 2, "method": "server/discover", "params": {"_meta": modern}})
+    tools = conn.handle({"jsonrpc": "2.0", "id": 3, "method": "tools/list", "params": {"_meta": modern}})
+    made = conn.handle({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
+        "_meta": modern, "name": "create_journal", "arguments": {
+            "client": client.slug, "date": "2026-06-30", "narration": "self-test accrual",
+            "lines": [{"account": _expense(st, client.slug), "debit": 110, "tax_rate": "GST on Expenses"},
+                      {"account": _creditor(st, client.slug), "credit": 110}]}}})
+    result = made["result"]
+    journal = json.loads(result["content"][0]["text"]) if not result["isError"] else {}
+    good = (init["result"]["serverInfo"]["name"] == "fortis-ledger" and "2026-07-28" in found["result"]["supportedVersions"]
+            and len(tools["result"]["tools"]) >= 13 and journal.get("status") == "draft"
+            and len(journal.get("lines", [])) == 3)
+    return good, (f"{len(tools['result']['tools'])} tools, draft {journal.get('number')}" if good
+                  else result["content"][0]["text"][:300])
+
+
+def _expense(st, slug: str) -> str:
+    from .ledger import Ledger
+    L = Ledger(st, slug)
+    return next(a.code for a in L.chart.usable() if a.report_code.startswith("EXP") and not L.is_appropriation(a.code)
+                and not a.report_code.startswith(("EXP.INC", "EXP.COS")))
+
+
+def _creditor(st, slug: str) -> str:
+    from .ledger import Ledger
+    return next(a.code for a in Ledger(st, slug).chart.usable() if a.report_code.startswith("LIA.CUR.PAY"))
 
 
 def _screens(d: Path) -> list[str]:

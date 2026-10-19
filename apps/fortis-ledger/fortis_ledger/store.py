@@ -87,10 +87,11 @@ def read_json(path: Path, default=None, quiet: bool = False):
 
 
 class FolderStore:
-    def __init__(self, root: str | Path, user: str = "", machine: str | None = None):
+    def __init__(self, root: str | Path, user: str = "", machine: str | None = None, agent: str = ""):
         self.root = Path(root)
         self.user = user or os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
         self.machine = machine or socket.gethostname()
+        self.agent = agent          # who acted for the user, e.g. "Claude" - recorded with each change
 
     # ---- layout ------------------------------------------------------------------------- #
     @property
@@ -348,6 +349,8 @@ class FolderStore:
     # ---- change log --------------------------------------------------------------------- #
     def audit(self, slug: str, action: str, detail: dict) -> None:
         rec = {"at": now_iso(), "user": self.user, "machine": self.machine, "action": action, "detail": detail}
+        if self.agent:
+            rec["via"] = self.agent
         path = self.client_dir(slug) / "audit.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as fh:

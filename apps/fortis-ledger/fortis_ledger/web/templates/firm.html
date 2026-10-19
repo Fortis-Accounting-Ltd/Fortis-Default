@@ -69,6 +69,41 @@
       {% if xr.get("client_id") %}<a class="btn" href="{{ url_for('ui.xero_home') }}">Connect to Xero {{ m.icon("arrow-right") }}</a>{% endif %}</div>
   </form>
 
+  <form class="card" id="claude" method="post" action="{{ url_for('ui.firm_settings') }}">
+    {{ m.csrf() }}
+    <div class="feature"><span class="feature-icon">{{ m.icon("spark") }}</span>
+      <div><h2>Claude</h2>
+        <p class="help">Lets Claude - the Claude desktop app, or Claude Code - read a client's ledger and prepare journals on a PC where
+          Fortis Ledger is installed. It works through the same rules as these screens, and every change it makes is marked
+          <em>via Claude</em> in the client's change log.</p></div></div>
+    <h3>What Claude may do (whole firm)</h3>
+    <label class="check"><input type="checkbox" name="can_post" value="yes"{% if (f.get('claude') or {}).get('can_post') %} checked{% endif %}> Claude can post journals</label>
+    <p class="help">Off: Claude saves journals as drafts, and a person checks and posts them (Journals &gt; Draft). On: Claude posts the
+      journals you ask it to post. Either way it can read the ledgers and add accounts, and it can delete only drafts it made itself.</p>
+    <div class="actions"><button class="btn primary" name="op" value="claude_save">Save</button></div>
+    <h3>This PC</h3>
+    <p>{% if claude.current %}<span class="badge ok">{{ m.icon("check") }} Connected to Claude Desktop</span>
+       {% elif claude.connected %}<span class="badge review">Connected to another copy of Fortis Ledger - connect again</span>
+       {% else %}<span class="badge light">Not connected</span>{% endif %}</p>
+    <div class="actions">
+      <button class="btn" name="op" value="claude_connect">{{ m.icon("spark") }} {% if claude.connected %}Connect again{% else %}Connect Claude Desktop{% endif %}</button>
+      {% if claude.connected %}<button class="btn link" name="op" value="claude_disconnect" data-confirm="Remove Fortis Ledger from Claude Desktop on this PC?">Disconnect</button>{% endif %}
+    </div>
+    <p class="help">Adds Fortis Ledger to Claude Desktop's connectors on this PC{% if not claude.installed %} - install Claude Desktop
+      (claude.ai/download) first{% endif %}. Then quit Claude Desktop completely and open it again; Claude asks before it uses Fortis Ledger.</p>
+    <details>
+      <summary>Claude Code, and what to ask Claude</summary>
+      <p class="help">For Claude Code, run this once in a terminal on this PC:</p>
+      <pre class="code-block">{{ claude_code }}</pre>
+      <p class="help">Then ask Claude, for example:</p>
+      <ul class="small">
+        <li>"In Fortis Ledger, journal depreciation of $4,500 on the plant for [client] at 30 June 2026."</li>
+        <li>"Here are the year-end accruals for [client] - draft them as one journal in Fortis Ledger."</li>
+        <li>"Show me [client]'s trial balance and any draft journals in Fortis Ledger."</li>
+      </ul>
+    </details>
+  </form>
+
   <div class="card">
     <div class="feature"><span class="feature-icon">{{ m.icon("desktop") }}</span>
       <div><h2>Desktop icons</h2><p class="help">Shortcuts on this PC's desktop. The installer puts the ones you ticked there - use these buttons to add one again if it was deleted.</p></div></div>

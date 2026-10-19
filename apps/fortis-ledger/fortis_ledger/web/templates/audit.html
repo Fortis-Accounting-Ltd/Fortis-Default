@@ -14,7 +14,7 @@
   <thead><tr><th>When</th><th>Who</th><th>PC</th><th>What</th><th>Detail</th></tr></thead>
   <tbody>
   {% for a in rows %}
-  <tr><td class="nowrap">{{ a.at|when }}</td><td class="nowrap">{{ a.user }}</td><td class="nowrap muted">{{ a.machine }}</td>
+  <tr><td class="nowrap">{{ a.at|when }}</td><td class="nowrap">{{ a.user }}{% if a.via %} <span class="badge info">via {{ a.via }}</span>{% endif %}</td><td class="nowrap muted">{{ a.machine }}</td>
     <td class="nowrap"><code>{{ a.action }}</code></td><td>{{ a|audit_text }}</td></tr>
   {% else %}
   <tr><td colspan="5" class="empty">Nothing found.</td></tr>

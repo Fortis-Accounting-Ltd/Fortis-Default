@@ -1,4 +1,6 @@
-# PyInstaller build of Fortis Ledger - a folder 'dist/Fortis Ledger' with 'Fortis Ledger.exe'.
+# PyInstaller build of Fortis Ledger - a folder 'dist/Fortis Ledger' with 'Fortis Ledger.exe' (the app, no console)
+# and 'fortis-ledger-mcp.exe' (the Claude connector: the same program as a console app, so Claude can talk to it
+# over stdin / stdout - launch.py starts it in connector mode).
 #   cd apps/fortis-ledger && pyinstaller --noconfirm --clean packaging/fortis-ledger.spec
 #
 # The app's report engine (fortis_ledger/reportengine) is bundled as files and its scripts are imported
@@ -46,4 +48,6 @@ a = Analysis([str(APP / "packaging" / "launch.py")], pathex=[str(APP)], hiddenim
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="Fortis Ledger", console=False,
           icon=str(ICON) if ICON.exists() else None, version=None)
-coll = COLLECT(exe, a.binaries, a.datas, name="Fortis Ledger")
+connector = EXE(pyz, a.scripts, [], exclude_binaries=True, name="fortis-ledger-mcp", console=True,
+                icon=str(ICON) if ICON.exists() else None, version=None)
+coll = COLLECT(exe, connector, a.binaries, a.datas, name="Fortis Ledger")

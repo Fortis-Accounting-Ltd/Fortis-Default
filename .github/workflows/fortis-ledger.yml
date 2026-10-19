@@ -52,6 +52,8 @@ jobs:
           $p = Start-Process -FilePath "dist\Fortis Ledger\Fortis Ledger.exe" -ArgumentList "--self-test" -Wait -PassThru
           Get-Content "$env:APPDATA\Fortis Ledger\self-test.txt"
           if ($p.ExitCode -ne 0) { throw "self-test failed (exit $($p.ExitCode))" }
+      - name: Check the Claude connector program
+        run: python packaging/check_connector.py "dist/Fortis Ledger/fortis-ledger-mcp.exe"
       - name: Build the installer
         shell: pwsh
         run: |

@@ -347,6 +347,10 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .sticky-actions .reason { width: 230px; }
 .pager { display: flex; align-items: center; gap: 12px; justify-content: center; margin: 8px 0 16px; }
 
+.code-block { background: #f2f4f7; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 6px 0 10px; white-space: pre-wrap;
+              word-break: break-all; font-family: "Cascadia Mono", Consolas, Menlo, monospace; font-size: 12px; }
+.badge .ic { width: 13px; height: 13px; vertical-align: -2px; }
+
 /* ---- the New account pop-up ------------------------------------------------------------------------- */
 .dialog { border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px; width: min(520px, calc(100vw - 32px)); box-shadow: var(--shadow-lg); color: var(--ink); }
 .dialog::backdrop { background: rgba(16, 24, 40, 0.45); }

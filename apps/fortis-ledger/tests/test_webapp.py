@@ -709,3 +709,37 @@ def test_profit_and_loss_balance_sheet_and_gst_pages(web, company, lib):
                                                      "as_at": "01/07/2027"})
     assert r.status_code == 302 and any("not been started" in m for m in flashes(web))
 
+
+
+# ---- Claude -------------------------------------------------------------------------------------------- #
+def test_claude_settings_and_what_claude_did(web, company, lib, tmp_path, monkeypatch):
+    from fortis_ledger.connector import Connector
+    cfg = tmp_path / "Claude" / "claude_desktop_config.json"
+    monkeypatch.setenv("FORTIS_LEDGER_CLAUDE_CONFIG", str(cfg))
+    page = text(web.get("/firm"))
+    assert "Claude can post journals" in page and "Not connected" in page and "claude mcp add --scope user fortis-ledger" in page
+    assert post(web, "/firm", {"op": "claude_save", "can_post": "yes"}).status_code == 302
+    assert store_for(lib).firm_settings()["claude"] == {"can_post": True}
+    post(web, "/firm", {"op": "claude_save"})
+    assert store_for(lib).firm_settings()["claude"] == {"can_post": False}
+    post(web, "/firm", {"op": "claude_connect"})
+    assert any("Quit Claude Desktop completely" in m for m in flashes(web))
+    assert json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]["fortis-ledger"]["args"][-1] == "--mcp"
+    assert "Connected to Claude Desktop" in text(web.get("/firm"))
+    post(web, "/firm", {"op": "claude_disconnect"})
+    assert "fortis-ledger" not in json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]
+    cfg.write_text("{oops", encoding="utf-8")
+    post(web, "/firm", {"op": "claude_connect"})
+    assert any("Claude Desktop was not changed" in m and "not valid JSON" in m for m in flashes(web))
+    # a journal Claude drafts is marked in the journal list, on the journal and in the change log
+    web.get("/")                                       # leaving the client hands its lock back
+    res = Connector(Settings(data_folder=str(lib), user_name="Tester")).handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "create_journal", "arguments": {
+            "client": "Web Co", "date": "30/06/2026", "narration": "Accrual from Claude",
+            "lines": [{"account": "72930", "debit": 250}, {"account": "31300", "credit": 250}]}}})
+    assert not res["result"]["isError"], res
+    listing = web.get(f"/c/{company}/journals?fy=2026&status=draft").get_data(as_text=True)
+    assert "Accrual from Claude" in listing and "Made by Claude for Tester" in listing
+    assert "Drafted by Claude for Tester" in text(web.get(f"/c/{company}/journals/2026/J2026-0001"))
+    assert "via Claude" in text(web.get(f"/c/{company}/changes"))
+    assert "via Claude" in text(web.get(f"/c/{company}/"))

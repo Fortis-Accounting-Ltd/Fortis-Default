@@ -25,8 +25,8 @@
     {% if j.kind == "bank" %}<dt>Bank account</dt><dd>{{ j.source.get("bank") }} {{ accounts[j.source.get("bank")].name if accounts.get(j.source.get("bank")) else "" }}</dd>{% endif %}
     {% if j.amounts == "exclusive" %}<dt>Amounts</dt><dd>GST exclusive</dd>{% endif %}
     {% if j.source.get("file") %}<dt>From</dt><dd>{{ j.source.get("file") }}</dd>{% endif %}
-    {% if j.created %}<dt>Created</dt><dd>{{ j.created.get("at")|when }} by {{ j.created.get("by") }}</dd>{% endif %}
-    {% if j.updated %}<dt>Changed</dt><dd>{{ j.updated.get("at")|when }} by {{ j.updated.get("by") }}</dd>{% endif %}
+    {% if j.created %}<dt>Created</dt><dd>{{ j.created.get("at")|when }} by {{ j.created.get("by") }}{% if j.created.get("via") %} <span class="badge info">via {{ j.created.get("via") }}</span>{% endif %}</dd>{% endif %}
+    {% if j.updated %}<dt>Changed</dt><dd>{{ j.updated.get("at")|when }} by {{ j.updated.get("by") }}{% if j.updated.get("via") %} <span class="badge info">via {{ j.updated.get("via") }}</span>{% endif %}</dd>{% endif %}
     {% if j.voided %}<dt>Voided</dt><dd>{{ j.voided.get("at")|when }} by {{ j.voided.get("by") }} - {{ j.voided.get("reason") }}</dd>{% endif %}
     {% if j.reverses %}<dt>Reverses</dt><dd>{{ j.reverses }}</dd>{% endif %}
     {% if j.reversed_by %}<dt>Reversed by</dt><dd>{{ j.reversed_by }}</dd>{% endif %}

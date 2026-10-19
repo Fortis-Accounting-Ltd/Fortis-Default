@@ -104,7 +104,7 @@
 <table class="grid compact">
   <tbody>
   {% for a in activity %}
-  <tr><td class="nowrap">{{ a.at|when }}</td><td class="nowrap">{{ a.user }}</td><td><code>{{ a.action }}</code></td><td>{{ a|audit_text }}</td></tr>
+  <tr><td class="nowrap">{{ a.at|when }}</td><td class="nowrap">{{ a.user }}{% if a.via %} <span class="badge info">via {{ a.via }}</span>{% endif %}</td><td><code>{{ a.action }}</code></td><td>{{ a|audit_text }}</td></tr>
   {% else %}<tr><td class="empty">Nothing yet.</td></tr>{% endfor %}
   </tbody>
 </table>

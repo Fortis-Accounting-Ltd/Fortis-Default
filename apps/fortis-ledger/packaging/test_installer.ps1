@@ -1,7 +1,8 @@
 # Check the Windows installer the way staff will use it: install for this person only (no administrator
-# rights), check the desktop icons and the Start menu entry, run the installed copy's self-test, install
-# again over the top (an upgrade), then uninstall and check that the program and its icons are gone but the
-# person's settings are kept.  Used by CI; on your own PC it installs and then removes Fortis Ledger.
+# rights), check the desktop icons and the Start menu entry, run the installed copy's self-test, talk to the
+# Claude connector program the way Claude Desktop does, install again over the top (an upgrade), then
+# uninstall and check that the program and its icons are gone but the person's settings are kept.
+# Used by CI; on your own PC it installs and then removes Fortis Ledger.
 #     powershell -ExecutionPolicy Bypass -File packaging\test_installer.ps1 dist\Fortis-Ledger-Setup-<version>.exe
 param([Parameter(Mandatory = $true)] [string] $Setup)
 $ErrorActionPreference = "Stop"
@@ -9,6 +10,7 @@ $Setup = (Resolve-Path $Setup).Path
 
 $dir = Join-Path $env:LOCALAPPDATA "Programs\Fortis Ledger"
 $exe = Join-Path $dir "Fortis Ledger.exe"
+$connector = Join-Path $dir "fortis-ledger-mcp.exe"
 $desktop = [Environment]::GetFolderPath("Desktop")
 $appIcon = Join-Path $desktop "Fortis Ledger.lnk"
 $xeroIcon = Join-Path $desktop "Fortis Ledger - Connect to Xero.lnk"
@@ -35,7 +37,7 @@ function Wait-For([scriptblock] $Done, [string] $What) {
 
 Write-Host "1. Install for this person only, with both desktop icons"
 Install-Once
-foreach ($f in @($exe, (Join-Path $dir "install.ini"), $appIcon, $xeroIcon, $startMenu)) {
+foreach ($f in @($exe, $connector, (Join-Path $dir "install.ini"), $appIcon, $xeroIcon, $startMenu)) {
     if (-not (Test-Path $f)) { throw "missing after install: $f" }
 }
 
@@ -58,6 +60,14 @@ Write-Host "4. The installed copy passes its self-test"
 $p = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru
 Get-Content (Join-Path $settingsDir "self-test.txt")
 if ($p.ExitCode -ne 0) { throw "the installed copy failed its self-test (exit $($p.ExitCode))" }
+
+Write-Host "4b. The Claude connector program answers the way Claude Desktop talks to it"
+if (Get-Command python -ErrorAction SilentlyContinue) {
+    python (Join-Path $PSScriptRoot "check_connector.py") $connector
+    if ($LASTEXITCODE -ne 0) { throw "the installed Claude connector failed its check" }
+} else {
+    Write-Host "   (Python is not on this PC, so the connector check was skipped)"
+}
 
 Write-Host "5. Installing again over the top (an upgrade) works"
 Install-Once

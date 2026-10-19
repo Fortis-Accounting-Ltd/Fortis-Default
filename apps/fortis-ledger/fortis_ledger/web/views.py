@@ -21,7 +21,7 @@ from flask import (Blueprint, abort, current_app, flash, g, jsonify, redirect, r
                    send_file, session, url_for)
 from werkzeug.utils import secure_filename
 
-from .. import bank as bankmod, imports, reports, shortcut, statements, xero
+from .. import bank as bankmod, claude_desktop, imports, reports, shortcut, statements, xero
 from ..chartbook import ACCOUNT_TYPES, ChartError, ClientChart, default_report_code
 from ..engine import chartlib, describe, report_code_options
 from ..ledger import Ledger, LedgerError, ValidationError, journal_from_form
@@ -1605,7 +1605,7 @@ def firm_settings():
                 MicrosoftConfig(m["tenant_id"], m["client_id"]).check()
             except SignInError as e:
                 flash(str(e), "error")
-                return render_template("firm.html", f=f, form=request.form, xero_scopes=XERO_SCOPES, xero_port=XERO_PORT)
+                return _firm_page(f, request.form)
             if op == "ms_test":
                 session["ms_test"] = m
                 return redirect(url_for("ui.signin_start_get"))
@@ -1615,7 +1615,7 @@ def firm_settings():
             if required and not same:
                 flash("Sign in once with these details (Test sign-in) before making sign-in required - "
                       "so nobody is locked out by a typing mistake.", "error")
-                return render_template("firm.html", f=f, form=request.form, xero_scopes=XERO_SCOPES, xero_port=XERO_PORT)
+                return _firm_page(f, request.form)
             st.save_firm_settings({"microsoft": {**m, "required": required}})
             flash("Office sign-in " + ("is now required on every PC that uses this data folder." if required
                                        else "details saved (sign-in is not required yet)."), "ok")
@@ -1626,15 +1626,34 @@ def firm_settings():
             st.save_firm_settings({"microsoft": m})
             flash("Office sign-in is no longer required.", "warn")
             return redirect(url_for("ui.firm_settings"))
+        if op == "claude_save":
+            can_post = request.form.get("can_post") == "yes"
+            st.save_firm_settings({"claude": {"can_post": can_post}})
+            flash("Claude can now post journals." if can_post else
+                  "Claude now saves journals as drafts for a person to post.", "ok")
+            return redirect(url_for("ui.firm_settings") + "#claude")
+        if op in ("claude_connect", "claude_disconnect"):
+            try:
+                changed = claude_desktop.connect() if op == "claude_connect" else claude_desktop.disconnect()
+            except (claude_desktop.ClaudeDesktopError, OSError) as e:
+                flash(f"Claude Desktop was not changed: {e}", "error")
+            else:
+                if op == "claude_connect":
+                    flash("Fortis Ledger is added to Claude Desktop on this PC. Quit Claude Desktop completely (right-click "
+                          "its icon by the clock > Quit) and open it again, then ask Claude about a client's ledger.", "ok")
+                else:
+                    flash("Fortis Ledger is removed from Claude Desktop on this PC." if changed else
+                          "Claude Desktop on this PC did not have Fortis Ledger.", "ok")
+            return redirect(url_for("ui.firm_settings") + "#claude")
         if op == "xero_save":
             cid = (request.form.get("xero_client_id") or "").strip()
             port = request.form.get("xero_port", type=int) or XERO_PORT
             if cid and not re.fullmatch(r"[A-Za-z0-9]{16,64}", cid):
                 flash("The Xero client ID is the long code on the app's Configuration page in developer.xero.com.", "error")
-                return render_template("firm.html", f=f, form=request.form, xero_scopes=XERO_SCOPES, xero_port=XERO_PORT)
+                return _firm_page(f, request.form)
             if not (1024 <= port <= 65535):
                 flash("The port must be between 1024 and 65535.", "error")
-                return render_template("firm.html", f=f, form=request.form, xero_scopes=XERO_SCOPES, xero_port=XERO_PORT)
+                return _firm_page(f, request.form)
             st.save_firm_settings({"xero": {"client_id": cid, "port": port} if cid else None})
             flash("Xero connection saved." if cid else "Xero connection removed.", "ok")
             return redirect(url_for("ui.firm_settings"))
@@ -1646,8 +1665,12 @@ def firm_settings():
             "xero_client_id": x.get("client_id", ""), "xero_port": x.get("port", XERO_PORT)}
     if not form["allowed_domains"] and (session.get("ms_user") or {}).get("email"):
         form["allowed_domains"] = session["ms_user"]["email"].rsplit("@", 1)[1]
+    return _firm_page(f, form, tested=session.get("ms_tested") or {})
+
+
+def _firm_page(f: dict, form, **extra):
     return render_template("firm.html", f=f, form=form, xero_scopes=XERO_SCOPES, xero_port=XERO_PORT,
-                           tested=session.get("ms_tested") or {})
+                           claude=claude_desktop.status(), claude_code=claude_desktop.claude_code_command(), **extra)
 
 
 @bp.route("/signin/test")
