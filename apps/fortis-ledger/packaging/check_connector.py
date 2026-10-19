@@ -7,8 +7,9 @@ Check a built Claude connector program end to end, the way Claude Desktop uses i
 It makes a data folder with a test client (using the app's source next to this script), starts the program
 with its own settings folder, talks MCP to it over stdin / stdout - the initialize handshake of earlier MCP
 revisions and the 2026-07-28 per-request form - and has it draft a journal.  With --extension the program
-first writes its Claude Desktop extension (.mcpb), and the check runs what Claude Desktop would: Node.js with
-the extension's script and arguments, which starts the program.  Exit code 0 means it worked.
+first writes its Claude Desktop extension (.mcpb), and the check runs it as Claude Desktop does: the
+extension's script and arguments in a Node.js host that feeds its stdin and reads its stdout as streams, with
+the real stdin closed (claude_node_host.js).  Exit code 0 means it worked.
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ import zipfile
 from pathlib import Path
 
 APP = Path(__file__).resolve().parent.parent
+HOST_JS = Path(__file__).resolve().parent / "claude_node_host.js"
 sys.path.insert(0, str(APP))
 
 from fortis_ledger.ledger import Ledger  # noqa: E402
@@ -75,21 +77,31 @@ def main(exe: str, extension: bool = False) -> int:
              "params": {"_meta": MODERN, "name": "create_journal", "arguments": journal}},
         ]
         env = {**os.environ, "FORTIS_LEDGER_HOME": str(home)}
-        cmd, complete = [exe], True
+        text = "".join(json.dumps(m) + "\n" for m in msgs)
+        complete = leaked = True
         if extension:
+            # as Claude Desktop runs an extension: its Node.js host feeds process.stdin and reads process.stdout
             cmd, extra, complete = extension_command(exe, Path(d), env)
             env.update(extra)
-        p = subprocess.run(cmd, input="".join(json.dumps(m) + "\n" for m in msgs), capture_output=True, text=True,
-                           timeout=180, env=env, encoding="utf-8")
+            (Path(d) / "messages.jsonl").write_text(text, encoding="utf-8")
+            replies = Path(d) / "replies.jsonl"
+            p = subprocess.run([cmd[0], str(HOST_JS), str(Path(d) / "messages.jsonl"), str(replies), *cmd[1:]],
+                               stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=180, env=env,
+                               encoding="utf-8")
+            answer = replies.read_text(encoding="utf-8") if replies.is_file() else ""
+            leaked = bool(p.stdout.strip())
+        else:
+            p = subprocess.run([exe], input=text, capture_output=True, text=True, timeout=180, env=env, encoding="utf-8")
+            answer = p.stdout
         print(f"exit {p.returncode}")
         if p.stderr.strip():
             print("stderr:", p.stderr.strip()[-2000:])
         try:
-            out = {r["id"]: r for r in (json.loads(x) for x in p.stdout.splitlines() if x.strip())}
+            out = {r["id"]: r for r in (json.loads(x) for x in answer.splitlines() if x.strip())}
             init, tools, disc, made = out[1]["result"], out[2]["result"], out[3]["result"], out[4]["result"]
             created = json.loads(made["content"][0]["text"])
         except (KeyError, ValueError, IndexError) as e:
-            print(f"FAILED - unexpected output ({e!r}):\n{p.stdout[-2000:]}")
+            print(f"FAILED - unexpected output ({e!r}):\n{answer[-2000:]}")
             return 1
         checks = {
             "initialize": init.get("serverInfo", {}).get("name") == "fortis-ledger" and init.get("protocolVersion") == "2025-06-18",
@@ -100,7 +112,7 @@ def main(exe: str, extension: bool = False) -> int:
             "log": (home / "claude-connector.log").is_file(),
         }
         if extension:
-            checks["extension"] = complete
+            checks["extension"] = complete and not leaked
         for k, ok in checks.items():
             print(f"{k}: {'ok' if ok else 'FAILED'}")
         good = p.returncode == 0 and all(checks.values())

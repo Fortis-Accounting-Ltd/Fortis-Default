@@ -6,5 +6,5 @@ log and the year status.  The Financial Reports pack is produced by the app's ow
 report engine (fortis_ledger/reportengine), so it matches the firm's Xero report templates.
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 APP_NAME = "Fortis Ledger"

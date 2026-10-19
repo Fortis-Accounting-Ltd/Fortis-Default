@@ -3,7 +3,8 @@ Adding the Claude connector to the Claude desktop app on this PC, two ways.
 
 - As an extension (a .mcpb file): Claude Desktop installs it in one click and keeps it in its own extensions
   folder.  The extension is a manifest and a small Node.js script (Claude Desktop ships with Node.js) that starts
-  the connector installed with Fortis Ledger, so it always runs this PC's current copy.
+  the connector installed with Fortis Ledger and relays Claude's messages to it, so it always runs this PC's
+  current copy.
 - In claude_desktop_config.json: the "fortis-ledger" entry under "mcpServers", keeping everything else in the
   file as it was and a copy of the old file beside it.  Claude Desktop reads the file when it starts.  Some
   versions of Claude Desktop for Windows rewrite that file when they start and drop entries added this way,
@@ -27,11 +28,15 @@ MCP_EXE = "fortis-ledger-mcp.exe" if os.name == "nt" else "fortis-ledger-mcp"
 ICON = Path(__file__).resolve().parent / "web" / "static" / "icon-512.png"
 PLATFORM = "win32" if os.name == "nt" else "darwin" if sys.platform == "darwin" else "linux"
 
-# server/index.js in the extension.  It must not read stdin itself: the connector gets Claude's stdin and stdout.
+# server/index.js in the extension.  Claude Desktop runs it in its own Node.js host (an Electron utility process),
+# where process.stdin and process.stdout are streams Claude feeds and reads - the process's real handles are not
+# Claude's channel.  So the script relays messages between those streams and the connector; handing the connector
+# the real handles (stdio "inherit") leaves it with no input, and it stops at once.
 PROXY_JS = """\
 // Fortis Ledger's Claude Desktop extension.  Starts the Claude connector installed with Fortis Ledger on this PC
-// (the program and arguments after this script's name, from manifest.json) and leaves Claude talking to it over
-// stdin / stdout.
+// (the program and arguments after this script's name, from manifest.json) and relays Claude's messages to it and
+// its replies back.  Claude Desktop runs this script in its own Node.js host, where stdin and stdout are streams
+// Claude provides rather than the process's real handles, so they are relayed here, not handed to the connector.
 "use strict";
 const { spawn } = require("child_process");
 
@@ -41,15 +46,29 @@ if (!command) {
   console.error("Fortis Ledger: the extension does not say where the connector is. " + AGAIN);
   process.exit(1);
 }
-const child = spawn(command, args, { stdio: "inherit", windowsHide: true });
+const child = spawn(command, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+let finished = false;
+function finish(code) {
+  if (finished) return;
+  finished = true;
+  process.stdout.write("", () => process.exit(code));       // after the last reply has gone to Claude
+}
 child.on("error", (err) => {
   console.error(`Fortis Ledger: could not start ${command} (${err.message}). If Fortis Ledger was moved or ` +
                 `reinstalled somewhere else: ${AGAIN}`);
-  process.exit(1);
+  finish(1);
 });
-child.on("exit", (code) => process.exit(code === null ? 1 : code));
+child.on("close", (code) => finish(code === null ? 1 : code));
+child.stdin.on("error", () => {});                          // the connector has stopped: "close" says so
+child.stdout.on("data", (chunk) => process.stdout.write(chunk));
+child.stderr.on("data", (chunk) => process.stderr.write(chunk));
+process.stdin.on("data", (chunk) => child.stdin.write(chunk));
+process.stdin.on("end", () => child.stdin.end());
+process.on("exit", () => {
+  if (child.exitCode === null && child.signalCode === null) child.kill();
+});
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
-  process.on(signal, () => child.kill(signal));
+  process.on(signal, () => process.exit(0));
 }
 """
 

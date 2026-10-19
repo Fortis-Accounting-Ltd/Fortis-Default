@@ -361,6 +361,7 @@ def test_frozen_copy_points_claude_at_the_connector_program(monkeypatch, tmp_pat
 
 # ---- the Claude Desktop extension ------------------------------------------------------------------ #
 NODE = shutil.which("node")
+HOST_JS = APP / "packaging" / "claude_node_host.js"
 
 
 def unpack(bundle: Path, into: Path) -> dict:
@@ -396,23 +397,38 @@ def test_the_claude_desktop_extension(tmp_path, monkeypatch):
 
 @pytest.mark.skipif(not NODE, reason="Node.js is not installed")
 def test_the_extension_runs_the_connector_through_node(tmp_path, lib):
+    """As Claude Desktop runs it: its Node.js host feeds the extension's process.stdin and reads its process.stdout,
+    and the process's real stdin is closed (packaging/claude_node_host.js does the same)."""
     folder, slug = lib
     env = settings_home(tmp_path, folder)
     cfg = unpack(claude_desktop.build_extension(tmp_path / "fortis-ledger.mcpb"), tmp_path / "ext")["server"]["mcp_config"]
     script = tmp_path / "ext" / "server" / "index.js"
-    cmd = [NODE, *(a.replace("${__dirname}", str(tmp_path / "ext")) for a in cfg["args"])]   # what Claude Desktop runs
+    server = [a.replace("${__dirname}", str(tmp_path / "ext")) for a in cfg["args"]]
     msgs = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
                 "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "claude-ai", "version": "1"}}},
             {"jsonrpc": "2.0", "method": "notifications/initialized"},
             {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
             {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "create_journal", "arguments": {
                 "client": "Claude Test", "date": "30/06/2026", "narration": "Through the extension", "lines": LINES}}}]
-    p = subprocess.run(cmd, input="".join(json.dumps(m) + "\n" for m in msgs), capture_output=True, text=True,
-                       timeout=120, env={**env, **cfg["env"]})
-    assert p.returncode == 0, p.stderr
-    out = {o["id"]: o for o in map(json.loads, p.stdout.splitlines())}
+    (tmp_path / "in.jsonl").write_text("".join(json.dumps(m) + "\n" for m in msgs), encoding="utf-8")
+
+    def claude_host(*entry_and_args):
+        replies = tmp_path / "out.jsonl"
+        p = subprocess.run([NODE, str(HOST_JS), str(tmp_path / "in.jsonl"), str(replies), *entry_and_args],
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120, env={**env, **cfg["env"]})
+        return p, [json.loads(x) for x in replies.read_text(encoding="utf-8").splitlines() if x.strip()]
+
+    p, replies = claude_host(*server)
+    assert p.returncode == 0 and not p.stdout.strip(), p.stderr          # every reply went to Claude, none elsewhere
+    out = {o["id"]: o for o in replies}
     assert out[1]["result"]["serverInfo"]["name"] == "fortis-ledger" and len(out[2]["result"]["tools"]) == 13
     assert json.loads(out[3]["result"]["content"][0]["text"])["number"] == "J2026-0001"
+    # handing the connector the process's real stdin and stdout instead (what 0.1.1 did) gets Claude no answer
+    (tmp_path / "inherit.js").write_text('const { spawn } = require("child_process");\n'
+                                         'const [c, ...a] = process.argv.slice(2);\n'
+                                         'spawn(c, a, { stdio: "inherit" }).on("exit", (code) => process.exit(code ?? 1));\n',
+                                         encoding="utf-8")
+    assert claude_host(str(tmp_path / "inherit.js"), *server[1:])[1] == []
     # Fortis Ledger moved or removed: Claude Desktop's log says what to do
     gone = subprocess.run([NODE, str(script), str(tmp_path / "nowhere" / claude_desktop.MCP_EXE)], capture_output=True,
                           text=True, timeout=60)

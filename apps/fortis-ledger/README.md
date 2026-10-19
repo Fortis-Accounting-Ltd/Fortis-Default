@@ -249,7 +249,10 @@ Good to know:
   project.
 - The extension (`fortis-ledger.mcpb`, made in `%APPDATA%\Fortis Ledger`) holds no copy of the program: a
   small script, run by the Node.js that comes with Claude Desktop, starts the `fortis-ledger-mcp.exe` installed
-  on that PC, so updating Fortis Ledger updates what Claude uses. If Fortis Ledger is moved or reinstalled in
+  on that PC and relays Claude's messages to it, so updating Fortis Ledger updates what Claude uses. (Claude
+  Desktop runs extension scripts in its own Node.js host, where stdin and stdout are streams it provides, so the
+  script relays them rather than handing the connector its real input and output; version 0.1.1 did that, and
+  Claude Desktop reported *Unable to connect to extension server*.) If Fortis Ledger is moved or reinstalled in
   another folder, install the extension again.
 - *Other ways* on the same card can instead add Fortis Ledger to Claude Desktop's settings file
   (`claude_desktop_config.json`). Some versions of Claude Desktop for Windows rewrite that file when they start
