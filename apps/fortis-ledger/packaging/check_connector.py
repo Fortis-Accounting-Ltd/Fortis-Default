@@ -2,18 +2,23 @@
 Check a built Claude connector program end to end, the way Claude Desktop uses it:
 
     python packaging/check_connector.py "dist/Fortis Ledger/fortis-ledger-mcp.exe"
+    python packaging/check_connector.py --extension "dist/Fortis Ledger/fortis-ledger-mcp.exe"
 
 It makes a data folder with a test client (using the app's source next to this script), starts the program
 with its own settings folder, talks MCP to it over stdin / stdout - the initialize handshake of earlier MCP
-revisions and the 2026-07-28 per-request form - and has it draft a journal.  Exit code 0 means it worked.
+revisions and the 2026-07-28 per-request form - and has it draft a journal.  With --extension the program
+first writes its Claude Desktop extension (.mcpb), and the check runs what Claude Desktop would: Node.js with
+the extension's script and arguments, which starts the program.  Exit code 0 means it worked.
 """
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 APP = Path(__file__).resolve().parent.parent
@@ -25,7 +30,29 @@ from fortis_ledger.store import FolderStore  # noqa: E402
 MODERN = {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}}
 
 
-def main(exe: str) -> int:
+def extension_command(exe: str, folder: Path, env: dict) -> tuple[list[str], dict, bool]:
+    """Have the program write its extension, unpack it, and return the command Claude Desktop would run, the
+    environment it adds, and whether the extension is complete (manifest, script and icon)."""
+    bundle = folder / "fortis-ledger.mcpb"
+    made = subprocess.run([exe, "--claude-extension", str(bundle)], capture_output=True, text=True, timeout=180,
+                          env=env, encoding="utf-8")
+    if made.returncode != 0 or not bundle.is_file():
+        raise SystemExit(f"FAILED - {exe} did not write the extension (exit {made.returncode}):\n{made.stderr[-2000:]}")
+    unpacked = folder / "extension"
+    with zipfile.ZipFile(bundle) as z:
+        z.extractall(unpacked)
+    manifest = json.loads((unpacked / "manifest.json").read_text(encoding="utf-8"))
+    cfg = manifest["server"]["mcp_config"]
+    node = shutil.which(cfg["command"])
+    if not node:
+        raise SystemExit("FAILED - Node.js is not on this PC, so the extension cannot be checked")
+    icon = (unpacked / manifest.get("icon", "-")).is_file()
+    print(f"extension: {manifest['name']} {manifest['version']}, {len(manifest['tools'])} tools, icon {'yes' if icon else 'no'}")
+    complete = manifest["name"] == "fortis-ledger" and icon and (unpacked / manifest["server"]["entry_point"]).is_file()
+    return [node, *(a.replace("${__dirname}", str(unpacked)) for a in cfg["args"])], dict(cfg.get("env") or {}), complete
+
+
+def main(exe: str, extension: bool = False) -> int:
     with tempfile.TemporaryDirectory(prefix="fortis-connector-check-") as d:
         lib, home = Path(d) / "library", Path(d) / "settings"
         st = FolderStore(lib, user="Connector Check", machine="ci")
@@ -48,7 +75,11 @@ def main(exe: str) -> int:
              "params": {"_meta": MODERN, "name": "create_journal", "arguments": journal}},
         ]
         env = {**os.environ, "FORTIS_LEDGER_HOME": str(home)}
-        p = subprocess.run([exe], input="".join(json.dumps(m) + "\n" for m in msgs), capture_output=True, text=True,
+        cmd, complete = [exe], True
+        if extension:
+            cmd, extra, complete = extension_command(exe, Path(d), env)
+            env.update(extra)
+        p = subprocess.run(cmd, input="".join(json.dumps(m) + "\n" for m in msgs), capture_output=True, text=True,
                            timeout=180, env=env, encoding="utf-8")
         print(f"exit {p.returncode}")
         if p.stderr.strip():
@@ -68,6 +99,8 @@ def main(exe: str) -> int:
             "saved": (lib / "clients" / c.slug / "years" / "2026" / "journals" / "J2026-0001.json").is_file(),
             "log": (home / "claude-connector.log").is_file(),
         }
+        if extension:
+            checks["extension"] = complete
         for k, ok in checks.items():
             print(f"{k}: {'ok' if ok else 'FAILED'}")
         good = p.returncode == 0 and all(checks.values())
@@ -76,6 +109,9 @@ def main(exe: str) -> int:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    argv = sys.argv[1:]
+    via_extension = "--extension" in argv
+    argv = [a for a in argv if a != "--extension"]
+    if len(argv) != 1:
         raise SystemExit(__doc__)
-    raise SystemExit(main(sys.argv[1]))
+    raise SystemExit(main(argv[0], extension=via_extension))

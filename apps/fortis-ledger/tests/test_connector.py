@@ -1,15 +1,18 @@
-"""The Claude connector: the MCP protocol (both eras), the tools, the ledger's rules, and Claude Desktop's config."""
+"""The Claude connector: the MCP protocol (both eras), the tools, the ledger's rules, and adding it to Claude Desktop
+(the extension, and Claude Desktop's config file)."""
 import asyncio
 import json
 import os
+import shutil
 import subprocess
 import sys
+import zipfile
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
-from fortis_ledger import claude_desktop, connector
+from fortis_ledger import __version__, claude_desktop, connector
 from fortis_ledger.connector import Connector
 from fortis_ledger.ledger import Ledger
 from fortis_ledger.settings import Settings
@@ -354,3 +357,73 @@ def test_frozen_copy_points_claude_at_the_connector_program(monkeypatch, tmp_pat
     monkeypatch.setattr(sys, "executable", str(tmp_path / "Fortis Ledger" / "Fortis Ledger.exe"))
     entry = claude_desktop.server_entry()
     assert entry == {"command": str(tmp_path / "Fortis Ledger" / claude_desktop.MCP_EXE), "args": []}
+
+
+# ---- the Claude Desktop extension ------------------------------------------------------------------ #
+NODE = shutil.which("node")
+
+
+def unpack(bundle: Path, into: Path) -> dict:
+    with zipfile.ZipFile(bundle) as z:
+        z.extractall(into)
+    return json.loads((into / "manifest.json").read_text(encoding="utf-8"))
+
+
+def test_the_claude_desktop_extension(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORTIS_LEDGER_HOME", str(tmp_path / "config"))
+    path = claude_desktop.build_extension()
+    assert path == tmp_path / "config" / "fortis-ledger.mcpb" and not list(path.parent.glob(".*.tmp"))
+    with zipfile.ZipFile(path) as z:
+        assert sorted(z.namelist()) == ["icon.png", "manifest.json", "server/index.js"]
+    m = unpack(path, tmp_path / "x")
+    assert (m["manifest_version"], m["name"], m["display_name"], m["version"]) == ("0.3", "fortis-ledger", "Fortis Ledger", __version__)
+    assert m["author"] == {"name": "Fortis Accounting Partners"}
+    assert m["server"]["type"] == "node" and m["server"]["entry_point"] == "server/index.js"
+    cfg = m["server"]["mcp_config"]
+    assert cfg["command"] == "node" and cfg["env"] == {"PYTHONPATH": str(APP)}
+    assert cfg["args"] == ["${__dirname}/server/index.js", sys.executable, "-m", "fortis_ledger", "--mcp"]
+    assert [t["name"] for t in m["tools"]] == [t.name for t in connector.TOOLS]
+    assert all(t["description"].endswith(".") and len(t["description"]) < 250 for t in m["tools"])
+    assert m["compatibility"]["platforms"] == [claude_desktop.PLATFORM] and m["icon"] == "icon.png"
+    from PIL import Image
+    assert Image.open(tmp_path / "x" / "icon.png").size == (512, 512)
+    # the installed copy: the extension starts the connector program installed beside the app
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "Fortis Ledger" / "Fortis Ledger.exe"))
+    cfg = unpack(claude_desktop.build_extension(tmp_path / "out" / "f.mcpb"), tmp_path / "y")["server"]["mcp_config"]
+    assert cfg["args"][1:] == [str(tmp_path / "Fortis Ledger" / claude_desktop.MCP_EXE)] and cfg["env"] == {}
+
+
+@pytest.mark.skipif(not NODE, reason="Node.js is not installed")
+def test_the_extension_runs_the_connector_through_node(tmp_path, lib):
+    folder, slug = lib
+    env = settings_home(tmp_path, folder)
+    cfg = unpack(claude_desktop.build_extension(tmp_path / "fortis-ledger.mcpb"), tmp_path / "ext")["server"]["mcp_config"]
+    script = tmp_path / "ext" / "server" / "index.js"
+    cmd = [NODE, *(a.replace("${__dirname}", str(tmp_path / "ext")) for a in cfg["args"])]   # what Claude Desktop runs
+    msgs = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "claude-ai", "version": "1"}}},
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "create_journal", "arguments": {
+                "client": "Claude Test", "date": "30/06/2026", "narration": "Through the extension", "lines": LINES}}}]
+    p = subprocess.run(cmd, input="".join(json.dumps(m) + "\n" for m in msgs), capture_output=True, text=True,
+                       timeout=120, env={**env, **cfg["env"]})
+    assert p.returncode == 0, p.stderr
+    out = {o["id"]: o for o in map(json.loads, p.stdout.splitlines())}
+    assert out[1]["result"]["serverInfo"]["name"] == "fortis-ledger" and len(out[2]["result"]["tools"]) == 13
+    assert json.loads(out[3]["result"]["content"][0]["text"])["number"] == "J2026-0001"
+    # Fortis Ledger moved or removed: Claude Desktop's log says what to do
+    gone = subprocess.run([NODE, str(script), str(tmp_path / "nowhere" / claude_desktop.MCP_EXE)], capture_output=True,
+                          text=True, timeout=60)
+    assert gone.returncode == 1 and "could not start" in gone.stderr and "Install the extension again" in gone.stderr
+    bare = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=60)
+    assert bare.returncode == 1 and "does not say where the connector is" in bare.stderr
+
+
+def test_the_programs_write_the_extension(tmp_path, monkeypatch):
+    from fortis_ledger.desktop import main
+    monkeypatch.setenv("FORTIS_LEDGER_HOME", str(tmp_path / "config"))
+    assert main(["--claude-extension", str(tmp_path / "a.mcpb")]) == 0 and (tmp_path / "a.mcpb").is_file()
+    # the connector program adds --mcp to whatever it is given; writing the extension still comes first
+    assert main(["--mcp", "--claude-extension", str(tmp_path / "b.mcpb")]) == 0 and (tmp_path / "b.mcpb").is_file()

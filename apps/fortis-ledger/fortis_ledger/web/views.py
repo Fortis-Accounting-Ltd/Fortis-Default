@@ -1639,11 +1639,38 @@ def firm_settings():
                 flash(f"Claude Desktop was not changed: {e}", "error")
             else:
                 if op == "claude_connect":
-                    flash("Fortis Ledger is added to Claude Desktop on this PC. Quit Claude Desktop completely (right-click "
-                          "its icon by the clock > Quit) and open it again, then ask Claude about a client's ledger.", "ok")
+                    flash("Fortis Ledger is added to Claude Desktop's settings file on this PC. Quit Claude Desktop completely "
+                          "(right-click its icon by the clock > Quit) and open it again. If Fortis Ledger is gone once Claude "
+                          "Desktop has started, use Install in Claude Desktop instead.", "ok")
                 else:
-                    flash("Fortis Ledger is removed from Claude Desktop on this PC." if changed else
-                          "Claude Desktop on this PC did not have Fortis Ledger.", "ok")
+                    flash("Fortis Ledger is removed from Claude Desktop's settings file on this PC." if changed else
+                          "Claude Desktop's settings file on this PC did not have Fortis Ledger.", "ok")
+            return redirect(url_for("ui.firm_settings") + "#claude")
+        if op in ("claude_extension", "claude_extension_file"):
+            try:
+                path = claude_desktop.build_extension()
+            except OSError as e:
+                flash(f"The Claude Desktop extension could not be made: {e}", "error")
+                return redirect(url_for("ui.firm_settings") + "#claude")
+            manual = ("drag it into the Claude Desktop window, or in Claude Desktop go to Settings > Extensions > "
+                      "Advanced settings > Install Extension... and choose it")
+            if op == "claude_extension_file":
+                open_path(path, folder=True)
+                flash(f"The extension is {path}. To install it, {manual}.", "ok")
+                return redirect(url_for("ui.firm_settings") + "#claude")
+            try:
+                claude_desktop.disconnect()      # also in the settings file, Claude would list Fortis Ledger twice
+            except (claude_desktop.ClaudeDesktopError, OSError):
+                pass
+            if claude_desktop.opens_with_claude():
+                open_path(path)
+                flash("Claude Desktop should now ask to install Fortis Ledger: click Install. Then, in a chat, it is under "
+                      f"+ > Connectors. If Claude Desktop did not open, {manual} (Show the file finds it).", "ok")
+            else:
+                open_path(path, folder=True)
+                flash(f"The extension is ready: {path.name}, shown in its folder. To install it, {manual}."
+                      + ("" if claude_desktop.status()["installed"] else
+                         " Install Claude Desktop first (claude.ai/download)."), "ok")
             return redirect(url_for("ui.firm_settings") + "#claude")
         if op == "xero_save":
             cid = (request.form.get("xero_client_id") or "").strip()

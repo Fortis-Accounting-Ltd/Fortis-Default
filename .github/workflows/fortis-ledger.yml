@@ -32,6 +32,12 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m pyflakes fortis_ledger tests
       - run: python -m pytest -q tests
+      - name: Check the Claude Desktop extension against the MCPB schema
+        if: runner.os == 'Linux'
+        run: |
+          python -m fortis_ledger --claude-extension "$RUNNER_TEMP/fortis-ledger.mcpb"
+          python -m zipfile -e "$RUNNER_TEMP/fortis-ledger.mcpb" "$RUNNER_TEMP/extension"
+          npx --yes @anthropic-ai/mcpb@2.1.2 validate "$RUNNER_TEMP/extension/manifest.json"
 
   windows-app:
     needs: test
@@ -54,6 +60,8 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "self-test failed (exit $($p.ExitCode))" }
       - name: Check the Claude connector program
         run: python packaging/check_connector.py "dist/Fortis Ledger/fortis-ledger-mcp.exe"
+      - name: Check the Claude Desktop extension the way Claude Desktop runs it (Node.js)
+        run: python packaging/check_connector.py --extension "dist/Fortis Ledger/fortis-ledger-mcp.exe"
       - name: Build the installer
         shell: pwsh
         run: |

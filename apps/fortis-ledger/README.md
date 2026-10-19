@@ -230,9 +230,12 @@ marked **via Claude** in the client's change log, on the journal and in the jour
    and saves a draft when you ask for one. A partner can turn it off; Claude then only saves drafts, and a
    person checks and posts them (*Journals > Draft*).
 2. On each PC: install Claude Desktop (claude.ai/download), then in Fortis Ledger click **Firm settings >
-   Claude > Connect Claude Desktop**. Quit Claude Desktop completely (right-click its icon by the clock >
-   Quit) and open it again. Claude asks your permission before it uses Fortis Ledger.
-   For Claude Code, run the command shown there instead (`claude mcp add fortis-ledger -- "...\fortis-ledger-mcp.exe"`).
+   Claude > Install in Claude Desktop**. Claude Desktop asks to install the *Fortis Ledger* extension: click
+   **Install**. In a chat it is then under **+ > Connectors**, and Claude asks your permission before it uses it.
+   If Claude Desktop does not open, drag the file (**Show the file**) into its window, or use Claude Desktop's
+   **Settings > Extensions > Advanced settings > Install Extension...**. IT can make the file with
+   `fortis-ledger-mcp.exe --claude-extension fortis-ledger.mcpb`.
+   For Claude Code, run the command shown under *Other ways* instead (`claude mcp add fortis-ledger -- "...\fortis-ledger-mcp.exe"`).
 3. Ask Claude, e.g. *"In Fortis Ledger, journal depreciation of $4,500 on the plant for [client] at 30 June
    2026"* or *"Here are the year-end accruals for [client] - draft them as one journal"*. Claude replies with
    the journal number; open it in Fortis Ledger to check and post it.
@@ -244,8 +247,15 @@ Good to know:
   yourself, Claude works alongside you.
 - Claude in a web browser or on a phone cannot reach it - that would need a hosted connector, a separate
   project.
-- Its log is `%APPDATA%\Fortis Ledger\claude-connector.log`. Claude Desktop's own list of connectors is in
-  `%APPDATA%\Claude\claude_desktop_config.json` (Claude Desktop > Settings > Developer).
+- The extension (`fortis-ledger.mcpb`, made in `%APPDATA%\Fortis Ledger`) holds no copy of the program: a
+  small script, run by the Node.js that comes with Claude Desktop, starts the `fortis-ledger-mcp.exe` installed
+  on that PC, so updating Fortis Ledger updates what Claude uses. If Fortis Ledger is moved or reinstalled in
+  another folder, install the extension again.
+- *Other ways* on the same card can instead add Fortis Ledger to Claude Desktop's settings file
+  (`claude_desktop_config.json`). Some versions of Claude Desktop for Windows rewrite that file when they start
+  and drop entries added this way, which is why the extension is the main way.
+- Its log is `%APPDATA%\Fortis Ledger\claude-connector.log`; Claude Desktop's logs are under
+  Claude Desktop > Settings > Developer.
 
 ## How the data is stored
 
@@ -298,9 +308,11 @@ The plan is to add the asset register next.
   (PDF and Excel), `web/` (the screens: Flask, served on 127.0.0.1 with a start-up token and CSRF checks;
   `bankviews.py` holds the bank screens), `desktop.py` (pywebview window), `connector.py` (the Claude
   connector: MCP over stdin / stdout, both the 2026-07-28 per-request form and the earlier `initialize`
-  handshake) and `claude_desktop.py` (adds it to Claude Desktop's config). The build makes two programs from
-  the same code: `Fortis Ledger.exe` (windowed) and `fortis-ledger-mcp.exe` (console, for Claude);
-  `packaging/check_connector.py` checks a built connector the way Claude Desktop talks to it.
+  handshake) and `claude_desktop.py` (makes the Claude Desktop extension - an MCP Bundle, `.mcpb` - and
+  edits Claude Desktop's config). The build makes two programs from the same code: `Fortis Ledger.exe`
+  (windowed) and `fortis-ledger-mcp.exe` (console, for Claude); `packaging/check_connector.py` checks a built
+  connector the way Claude Desktop talks to it, directly or (`--extension`) through the extension and Node.js,
+  and CI checks the extension's manifest with Anthropic's `mcpb validate`.
 - Sign-ins: `oauth.py` is the shared part: OAuth 2.0 authorisation code with PKCE, returning to a one-off listener
   on localhost (RFC 8252). It uses no client secret, and tokens stay in memory. `msauth.py` is office sign-in
   (Microsoft Entra ID; it checks the tenant, the audience, the nonce and the email domain). `xero_connect.py`

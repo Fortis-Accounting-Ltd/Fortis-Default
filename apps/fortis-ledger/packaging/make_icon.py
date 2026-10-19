@@ -1,4 +1,5 @@
-"""Draw the app icon (fortis-ledger.ico) - the same design as fortis_ledger/web/static/icon.svg."""
+"""Draw the app icon (fortis-ledger.ico, and icon-512.png for the Claude Desktop extension) - the same design as
+fortis_ledger/web/static/icon.svg."""
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -29,3 +30,6 @@ if __name__ == "__main__":
     big = draw(256)
     big.save(out, sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
     print(out)
+    png = Path(__file__).resolve().parent.parent / "fortis_ledger" / "web" / "static" / "icon-512.png"
+    draw(512).save(png, optimize=True)
+    print(png)

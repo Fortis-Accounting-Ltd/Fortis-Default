@@ -6,6 +6,8 @@ the default web browser instead.
     python -m fortis_ledger              desktop window
     python -m fortis_ledger --browser    in the web browser
     python -m fortis_ledger --mcp        the Claude connector (MCP over stdin / stdout - Claude starts it)
+    python -m fortis_ledger --claude-extension FILE
+                                         write the Claude Desktop extension for this PC (a .mcpb file)
 """
 from __future__ import annotations
 
@@ -101,11 +103,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--start", choices=sorted(START_PAGES), default="clients", help="screen to open first")
     ap.add_argument("--self-test", action="store_true", help="check this copy end to end and exit (0 = ok)")
     ap.add_argument("--mcp", action="store_true", help="run the Claude connector on stdin / stdout (Claude starts it)")
+    ap.add_argument("--claude-extension", metavar="FILE",
+                    help="write the Claude Desktop extension for this PC to FILE (a .mcpb) and exit")
     ap.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
     args = ap.parse_args(argv)
     if args.self_test:
         from .selftest import run
         return run()
+    if args.claude_extension:                # before --mcp: the connector program adds --mcp to whatever it is given
+        from .claude_desktop import build_extension
+        say(str(build_extension(args.claude_extension)))
+        return 0
     if args.mcp:
         from .connector import serve
         return serve()

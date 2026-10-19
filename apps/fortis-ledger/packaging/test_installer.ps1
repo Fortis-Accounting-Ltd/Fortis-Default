@@ -1,6 +1,7 @@
 # Check the Windows installer the way staff will use it: install for this person only (no administrator
 # rights), check the desktop icons and the Start menu entry, run the installed copy's self-test, talk to the
-# Claude connector program the way Claude Desktop does, install again over the top (an upgrade), then
+# Claude connector program the way Claude Desktop does (directly, and through the Claude Desktop extension the
+# installed copy makes, when Node.js is on the PC), install again over the top (an upgrade), then
 # uninstall and check that the program and its icons are gone but the person's settings are kept.
 # Used by CI; on your own PC it installs and then removes Fortis Ledger.
 #     powershell -ExecutionPolicy Bypass -File packaging\test_installer.ps1 dist\Fortis-Ledger-Setup-<version>.exe
@@ -65,6 +66,11 @@ Write-Host "4b. The Claude connector program answers the way Claude Desktop talk
 if (Get-Command python -ErrorAction SilentlyContinue) {
     python (Join-Path $PSScriptRoot "check_connector.py") $connector
     if ($LASTEXITCODE -ne 0) { throw "the installed Claude connector failed its check" }
+    if (Get-Command node -ErrorAction SilentlyContinue) {
+        Write-Host "   and through its Claude Desktop extension, run with Node.js as Claude Desktop does"
+        python (Join-Path $PSScriptRoot "check_connector.py") --extension $connector
+        if ($LASTEXITCODE -ne 0) { throw "the installed copy's Claude Desktop extension failed its check" }
+    }
 } else {
     Write-Host "   (Python is not on this PC, so the connector check was skipped)"
 }

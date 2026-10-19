@@ -83,25 +83,37 @@
       can delete only drafts it made itself.</p>
     <div class="actions"><button class="btn primary" name="op" value="claude_save">Save</button></div>
     <h3>This PC</h3>
-    <p>{% if claude.current %}<span class="badge ok">{{ m.icon("check") }} Connected to Claude Desktop</span>
-       {% elif claude.connected %}<span class="badge review">Connected to another copy of Fortis Ledger - connect again</span>
-       {% else %}<span class="badge light">Not connected</span>{% endif %}</p>
+    <p class="help">Installs Fortis Ledger in Claude Desktop as an extension{% if not claude.installed %} - install Claude Desktop
+      (claude.ai/download) first{% endif %}. Claude Desktop asks to install <strong>Fortis Ledger</strong>: click <strong>Install</strong>.
+      In a chat it is then under <strong>+ &gt; Connectors</strong>, and Claude asks before it uses it.</p>
     <div class="actions">
-      <button class="btn" name="op" value="claude_connect">{{ m.icon("spark") }} {% if claude.connected %}Connect again{% else %}Connect Claude Desktop{% endif %}</button>
-      {% if claude.connected %}<button class="btn link" name="op" value="claude_disconnect" data-confirm="Remove Fortis Ledger from Claude Desktop on this PC?">Disconnect</button>{% endif %}
+      <button class="btn" name="op" value="claude_extension">{{ m.icon("spark") }} Install in Claude Desktop</button>
+      <button class="btn link" name="op" value="claude_extension_file">Show the file</button>
     </div>
-    <p class="help">Adds Fortis Ledger to Claude Desktop's connectors on this PC{% if not claude.installed %} - install Claude Desktop
-      (claude.ai/download) first{% endif %}. Then quit Claude Desktop completely and open it again; Claude asks before it uses Fortis Ledger.</p>
+    <p class="help">If Claude Desktop does not open, drag the file into its window, or go to Settings &gt; Extensions &gt; Advanced
+      settings &gt; Install Extension... If Fortis Ledger is moved or reinstalled in another folder, install it again.</p>
     <details>
-      <summary>Claude Code, and what to ask Claude</summary>
-      <p class="help">For Claude Code, run this once in a terminal on this PC:</p>
-      <pre class="code-block">{{ claude_code }}</pre>
-      <p class="help">Then ask Claude, for example:</p>
+      <summary>What to ask Claude</summary>
       <ul class="small">
         <li>"In Fortis Ledger, journal depreciation of $4,500 on the plant for [client] at 30 June 2026."</li>
         <li>"Here are the year-end accruals for [client] - draft them as one journal in Fortis Ledger."</li>
         <li>"Show me [client]'s trial balance and any draft journals in Fortis Ledger."</li>
       </ul>
+    </details>
+    <details>
+      <summary>Other ways: Claude Desktop's settings file, and Claude Code</summary>
+      <p>{% if claude.current %}<span class="badge ok">{{ m.icon("check") }} In Claude Desktop's settings file</span>
+         {% elif claude.connected %}<span class="badge review">In the settings file for another copy of Fortis Ledger - add again</span>
+         {% else %}<span class="badge light">Not in the settings file</span>{% endif %}</p>
+      <p class="help">Adds Fortis Ledger to Claude Desktop's settings file (claude_desktop_config.json) instead of installing the
+        extension; Claude Desktop reads it when it starts. Some versions of Claude Desktop for Windows remove entries added this way
+        when they start - if Fortis Ledger is gone from Claude, use Install in Claude Desktop above.</p>
+      <div class="actions">
+        <button class="btn" name="op" value="claude_connect">{% if claude.connected %}Add again{% else %}Add to the settings file{% endif %}</button>
+        {% if claude.connected %}<button class="btn link" name="op" value="claude_disconnect" data-confirm="Remove Fortis Ledger from Claude Desktop's settings file on this PC?">Remove</button>{% endif %}
+      </div>
+      <p class="help">For Claude Code, run this once in a terminal on this PC:</p>
+      <pre class="code-block">{{ claude_code }}</pre>
     </details>
   </form>
 

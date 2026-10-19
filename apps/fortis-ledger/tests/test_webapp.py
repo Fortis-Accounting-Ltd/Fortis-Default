@@ -3,12 +3,13 @@ import datetime as dt
 import io
 import json
 import re
+import zipfile
 from decimal import Decimal
 
 import openpyxl
 import pytest
 
-from fortis_ledger import bank
+from fortis_ledger import bank, claude_desktop
 from fortis_ledger.ledger import Ledger
 from fortis_ledger.settings import Settings
 from fortis_ledger.store import FolderStore
@@ -717,22 +718,39 @@ def test_claude_settings_and_what_claude_did(web, company, lib, tmp_path, monkey
     cfg = tmp_path / "Claude" / "claude_desktop_config.json"
     monkeypatch.setenv("FORTIS_LEDGER_CLAUDE_CONFIG", str(cfg))
     page = text(web.get("/firm"))
-    assert "Claude can post journals" in page and "Not connected" in page and "claude mcp add --scope user fortis-ledger" in page
+    assert "Claude can post journals" in page and "Install in Claude Desktop" in page and "Not in the settings file" in page
+    assert "claude mcp add --scope user fortis-ledger" in page
     assert 'name="can_post" value="yes" checked' in page          # on unless a partner turns it off
     assert post(web, "/firm", {"op": "claude_save", "can_post": "yes"}).status_code == 302
     assert store_for(lib).firm_settings()["claude"] == {"can_post": True}
     post(web, "/firm", {"op": "claude_save"})
     assert store_for(lib).firm_settings()["claude"] == {"can_post": False}
     assert 'name="can_post" value="yes" checked' not in text(web.get("/firm"))
+    # the settings-file way
     post(web, "/firm", {"op": "claude_connect"})
     assert any("Quit Claude Desktop completely" in m for m in flashes(web))
     assert json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]["fortis-ledger"]["args"][-1] == "--mcp"
-    assert "Connected to Claude Desktop" in text(web.get("/firm"))
+    assert "In Claude Desktop's settings file" in text(web.get("/firm"))
     post(web, "/firm", {"op": "claude_disconnect"})
     assert "fortis-ledger" not in json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]
+    # the extension: made in the settings folder and opened with Claude Desktop, or shown in its folder to drag in
+    post(web, "/firm", {"op": "claude_connect"})
+    monkeypatch.setattr(claude_desktop, "opens_with_claude", lambda: True)
+    post(web, "/firm", {"op": "claude_extension"})
+    bundle = tmp_path / "config" / "fortis-ledger.mcpb"
+    assert web.application.opened[-1] == (bundle, False) and zipfile.is_zipfile(bundle)
+    assert any("click Install" in m for m in flashes(web))
+    assert "fortis-ledger" not in json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]   # not listed twice
+    monkeypatch.setattr(claude_desktop, "opens_with_claude", lambda: False)
+    post(web, "/firm", {"op": "claude_extension"})
+    assert web.application.opened[-1] == (bundle, True) and any("Install Extension..." in m for m in flashes(web))
+    post(web, "/firm", {"op": "claude_extension_file"})
+    assert web.application.opened[-1] == (bundle, True) and any(str(bundle) in m for m in flashes(web))
     cfg.write_text("{oops", encoding="utf-8")
     post(web, "/firm", {"op": "claude_connect"})
     assert any("Claude Desktop was not changed" in m and "not valid JSON" in m for m in flashes(web))
+    post(web, "/firm", {"op": "claude_extension"})                 # a broken settings file does not stop the extension
+    assert any("Install Extension..." in m for m in flashes(web)) and cfg.read_text(encoding="utf-8") == "{oops"
     # a journal Claude drafts is marked in the journal list, on the journal and in the change log
     web.get("/")                                       # leaving the client hands its lock back
     res = Connector(Settings(data_folder=str(lib), user_name="Tester")).handle(
