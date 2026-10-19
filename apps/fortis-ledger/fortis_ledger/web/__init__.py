@@ -68,6 +68,10 @@ def create_app(settings: Settings | None = None, token: str | None = None,
         XERO_ENDPOINTS=Endpoints(),
         BROWSER=None,            # opens a URL in the PC's browser (webbrowser.open unless set)
         SHORTCUT=None,           # makes a desktop icon (shortcut.create unless set)
+        WINDOW=None,             # the desktop window, so Restart (after an update) can close it
+        UPDATE_FILE=None,        # an update file Fortis Ledger was opened with (double-click, email)
+        UPDATE_TRUST=None,       # whose updates are installed (None: the firm's GitHub build - tests set their own)
+        UPDATE_CHECKS=True,      # look in the shared folder for updates in the background
     )
     app.config["WORK_DIR"].mkdir(parents=True, exist_ok=True)
 
@@ -153,6 +157,13 @@ def create_app(settings: Settings | None = None, token: str | None = None,
     def _entity(v):
         return ENTITY_LABELS.get(v, v)
 
+    @app.template_filter("sentence")
+    def _sentence(v):
+        """'the file is ...' -> 'The file is ....' (capitalize would lower-case the rest)."""
+        s = str(v or "").strip()
+        s = s[:1].upper() + s[1:]
+        return s if not s or s.endswith((".", "!", "?")) else s + "."
+
     @app.template_filter("filesize")
     def _filesize(n):
         n = float(n or 0)
@@ -173,8 +184,10 @@ def create_app(settings: Settings | None = None, token: str | None = None,
     for code in (400, 403, 404, 405, 413, 500):
         app.register_error_handler(code, _error_page(code))
 
-    from .bankviews import bp      # the screens' blueprint (views.py) with the bank screens added to it
-    app.register_blueprint(bp)
+    from . import bankviews, teamviews, updateviews
+    for screens in (bankviews, teamviews, updateviews):     # each adds its screens to the one blueprint (views.py)
+        if screens.bp.name not in app.blueprints:
+            app.register_blueprint(screens.bp)
     return app
 
 

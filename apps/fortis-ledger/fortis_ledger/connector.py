@@ -36,6 +36,7 @@ from .model import Journal, Line, parse_date
 from .money import ZERO, as_str, to_dec
 from .settings import Settings, config_dir, default_user_name
 from .store import FolderStore, StoreError
+from .team import Team
 
 log = logging.getLogger("fortis_ledger.connector")
 
@@ -106,7 +107,19 @@ class Workspace:
         user = identity(settings, self.firm)
         if not user:
             raise ToolError("Set your name in Fortis Ledger's Settings first - it goes in the change log.")
+        ms = self.firm.get("microsoft") or {}
+        signin = bool(ms.get("required") and ms.get("tenant_id") and ms.get("client_id"))
+        # the team's rules apply while office sign-in is required, as on the screens - people are known by their email
+        self.team = Team.load(probe.read_team()) if signin else Team()
+        if not self.team.can_use(user):
+            admins = ", ".join(self.team.name(e) for e in self.team.admins()) or "an admin"
+            raise ToolError(f"{user} cannot use this firm's Fortis Ledger clients - ask {admins} to give you access.")
+        self.user = user
         self.store = FolderStore(folder, user=user, agent=AGENT)
+
+    def clients(self) -> list:
+        """The clients this person may open (the firm's team access rules apply to Claude as to the screens)."""
+        return [c for c in self.store.list_clients() if self.team.can_open(self.user, c.slug)]
 
     @property
     def can_post(self) -> bool:
@@ -117,7 +130,7 @@ class Workspace:
         t = str(text or "").strip()
         if not t:
             raise ToolError("Say which client: its id from list_clients, or its name.")
-        clients = self.store.list_clients()
+        clients = self.clients()
         for c in clients:
             if c.slug == t:
                 return c
@@ -288,7 +301,7 @@ def _rows(data: dict) -> list[dict]:
 def t_list_clients(ws: Workspace, args: dict) -> dict:
     q = str(args.get("search") or "").strip().lower()
     out = []
-    for c in ws.store.list_clients():
+    for c in ws.clients():
         if q and q not in c.name.lower() and q not in (c.legal_name or "").lower() \
                 and q.replace(" ", "") not in (c.abn or "").replace(" ", ""):
             continue

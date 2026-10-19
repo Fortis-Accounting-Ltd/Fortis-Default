@@ -3,18 +3,28 @@
 # over stdin / stdout - launch.py starts it in connector mode).
 #   cd apps/fortis-ledger && pyinstaller --noconfirm --clean packaging/fortis-ledger.spec
 #
-# The app's report engine (fortis_ledger/reportengine) is bundled as files and its scripts are imported
-# from there at run time, so the charts, report map, wording and fonts resolve next to them exactly as
-# they do from the source folder.  PyInstaller cannot see those imports, so the modules the scripts use
-# are listed for it below.
+# The program is a Python runtime with the libraries the app uses; the app's own code (fortis_ledger, with its
+# templates and report engine) is bundled as plain files, not inside the program, so an update file can replace
+# just that (launch.py loads the newest installed update - see fortis_ledger/updates.py).  For updates to be able
+# to use any part of Python's standard library, and any part of the libraries the app already uses, all of them
+# are bundled, not only what today's code imports.  A new library needs a new runtime: raise RUNTIME in launch.py.
+#
+# The report engine's scripts are imported from their files at run time, so the modules they use are listed for
+# PyInstaller below.
 import ast
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 APP = Path(SPECPATH).resolve().parent
-ENGINE = APP / "fortis_ledger" / "reportengine"
+PACKAGE = APP / "fortis_ledger"
+ENGINE = PACKAGE / "reportengine"
 ICON = APP / "packaging" / "fortis-ledger.ico"
+NOT_BUNDLED = {"tkinter", "turtle", "turtledemo", "idlelib", "test", "ensurepip", "venv", "lib2to3", "pydoc_data",
+               "msilib", "antigravity", "this", "__phello__", "xxsubtype"}
+LIBRARIES = ["flask", "werkzeug", "jinja2", "markupsafe", "itsdangerous", "click", "blinker", "reportlab", "openpyxl",
+             "et_xmlfile", "PIL"]
 
 
 def imports_of(folder: Path) -> list[str]:
@@ -29,13 +39,28 @@ def imports_of(folder: Path) -> list[str]:
     return sorted(n for n in names if n.split(".")[0] not in local and n != "__future__")
 
 
-hidden = imports_of(ENGINE / "scripts") + collect_submodules("reportlab") + collect_submodules("openpyxl")
-datas = [(str(APP / "fortis_ledger" / "web" / "templates"), "fortis_ledger/web/templates"),
-         (str(APP / "fortis_ledger" / "web" / "static"), "fortis_ledger/web/static"),
-         (str(ENGINE / "scripts"), "fortis_ledger/reportengine/scripts"),
-         (str(ENGINE / "assets"), "fortis_ledger/reportengine/assets"),
-         (str(ENGINE / "SOURCE.md"), "fortis_ledger/reportengine")]
-datas += collect_data_files("reportlab")
+def standard_library() -> list[str]:
+    out = []
+    for name in sorted(sys.stdlib_module_names):
+        if name in NOT_BUNDLED or name.startswith("_"):
+            continue
+        try:
+            out += collect_submodules(name, filter=lambda m: m.split(".")[1:2] != ["test"] and ".tests" not in m)
+        except Exception:
+            out.append(name)
+    return out
+
+
+def package_files() -> list[tuple[str, str]]:
+    """fortis_ledger as plain files (code, templates, report engine), without compiled caches."""
+    return [(str(f), str(f.parent.relative_to(APP))) for f in sorted(PACKAGE.rglob("*"))
+            if f.is_file() and "__pycache__" not in f.parts and f.suffix not in (".pyc", ".pyo")]
+
+
+hidden = imports_of(ENGINE / "scripts") + standard_library()
+for lib in LIBRARIES:
+    hidden += collect_submodules(lib)
+datas = package_files() + collect_data_files("reportlab")
 try:
     import webview  # noqa: F401  - only on Windows builds
     hidden += collect_submodules("webview")
@@ -44,7 +69,9 @@ except ImportError:
     pass
 
 a = Analysis([str(APP / "packaging" / "launch.py")], pathex=[str(APP)], hiddenimports=hidden, datas=datas,
-             excludes=["tkinter", "pytest", "playwright", "IPython", "matplotlib", "numpy", "pandas"])
+             excludes=sorted(NOT_BUNDLED) + ["pytest", "playwright", "IPython", "matplotlib", "numpy", "pandas"])
+# the app's own modules load from the files above (or an update), not from inside the program
+a.pure = [m for m in a.pure if m[0] != "fortis_ledger" and not m[0].startswith("fortis_ledger.")]
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="Fortis Ledger", console=False,
           icon=str(ICON) if ICON.exists() else None, version=None)

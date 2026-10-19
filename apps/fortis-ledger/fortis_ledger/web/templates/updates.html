@@ -1,0 +1,125 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Updates{% endblock %}
+{% block content %}
+{% set cur = st.installed or {} %}
+<div class="page-head">
+  <div><h1>Updates</h1>
+    <p class="muted">Fortis Ledger {{ st.running }} on this PC. Updates are small files ({{ ext }}) made by the firm's build:
+      open one from an email, or install the one an admin shared with everyone.</p></div>
+</div>
+
+{% if st.restart %}
+<div class="flash info" role="status">{{ m.icon("refresh") }}<span>Fortis Ledger {{ cur.version }} is installed. Restart Fortis Ledger to start using it.</span>
+  {{ m.post_button(url_for('ui.updates_restart'), "Restart now", "btn small primary", confirm="Restart Fortis Ledger now? Anything not saved on an open screen is lost.") }}</div>
+{% elif st.set_aside and cur.version %}
+<div class="flash warn" role="status">{{ m.icon("alert") }}<span>
+  {% if st.set_aside == "set aside by hand" %}This PC uses the version installed with the program, not update {{ cur.version }} - install an update to change that.
+  {% else %}Update {{ cur.version }} did not start on this PC, so Fortis Ledger runs the version installed with the program.
+    Install the next update when it comes, or the full installer. <span class="muted small">({{ st.set_aside }})</span>{% endif %}</span></div>
+{% endif %}
+
+<div class="cards two">
+  {% if review or review_error %}
+  <div class="card" id="review">
+    <div class="feature"><span class="feature-icon">{{ m.icon("import") }}</span>
+      <div><h2>{% if review %}Install Fortis Ledger {{ review.version }}{% else %}This file can't be installed{% endif %}</h2>
+        <p class="help">From {{ review_name }}</p></div></div>
+    {% if review %}
+    <dl class="facts">
+      <dt>Checked</dt><dd><span class="badge ok">{{ m.icon("shield") }} Made by the firm's build</span></dd>
+      <dt>Built from</dt><dd>{{ review.source }}</dd>
+      {% if review.built %}<dt>Made</dt><dd>{{ review.built|when }}</dd>{% endif %}
+      <dt>Size</dt><dd>{{ review.size|filesize }}</dd>
+    </dl>
+    {% if review_why %}
+    <p class="warn-text">It can't be installed here: {{ review_why }}.</p>
+    {% else %}
+    <form method="post" action="{{ url_for('ui.updates_install') }}">
+      {{ m.csrf() }}<input type="hidden" name="which" value="file">
+      {% if admin %}
+      <label class="check"><input type="checkbox" name="share" value="yes" checked> Also share it with everyone who uses the data folder</label>
+      <p class="help">Every PC that uses the data folder is then offered it - nobody needs the email.</p>
+      {% endif %}
+      <div class="actions"><button class="btn primary">{{ m.icon("import") }} Install {{ review.version }}</button></div>
+    </form>
+    {% endif %}
+    {% else %}
+    <p class="err-text">{{ review_error|sentence }}</p>
+    <p class="help">Fortis Ledger only installs updates made by the firm's own build, unchanged - ask whoever sent it for a fresh copy.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="feature"><span class="feature-icon">{{ m.icon("users") }}</span>
+      <div><h2>Shared with everyone</h2>
+        <p class="help">Updates an admin shares go in the data folder, and every PC that uses it is offered them.</p></div></div>
+    {% if shared %}
+    <p><strong>Fortis Ledger {{ shared.version }}</strong> is ready to install <span class="muted small">({{ shared.source }})</span>.</p>
+    <form method="post" action="{{ url_for('ui.updates_install') }}">
+      {{ m.csrf() }}<input type="hidden" name="which" value="shared">
+      <div class="actions"><button class="btn primary">{{ m.icon("import") }} Install {{ shared.version }}</button></div>
+    </form>
+    {% else %}
+    <p class="muted">{% if st.runtime %}Nothing newer than {{ st.running }} has been shared.{% else %}Updates are installed into the installed program - this copy runs from its source folder.{% endif %}</p>
+    {% endif %}
+    {% if problems %}
+    <ul class="checklist small">{% for p in problems %}<li class="warn">{{ p }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+
+  <form class="card" method="post" action="{{ url_for('ui.updates_choose') }}" enctype="multipart/form-data">
+    {{ m.csrf() }}
+    <div class="feature"><span class="feature-icon">{{ m.icon("file") }}</span>
+      <div><h2>Install an update file</h2>
+        <p class="help">Double-click an update file in an email or a folder and Fortis Ledger opens it here. Or choose it:</p></div></div>
+    <input type="file" name="file" accept="{{ ext }}" required aria-label="Update file">
+    <div class="actions"><button class="btn">Check the file</button></div>
+  </form>
+
+  <div class="card">
+    <div class="feature"><span class="feature-icon">{{ m.icon("mail") }}</span>
+      <div><h2>Send it by email</h2>
+        <p class="help">Attach the update file to an email. Whoever opens it on a PC with Fortis Ledger is asked to install it - it is
+          checked first, so only the firm's own updates go in.</p></div></div>
+    {% if saved %}
+    <p><code>{{ saved.name }}</code> <span class="muted small">{{ saved.stat().st_size|filesize }}</span></p>
+    <div class="actions">
+      {{ m.post_button(url_for('ui.updates_show'), "Show the file", "btn", fields={"version": saved_version}) }}
+      {% if admin %}{{ m.post_button(url_for('ui.updates_share'), "Share with everyone", "btn", fields={"version": saved_version}) }}{% endif %}
+    </div>
+    {% else %}
+    <p class="muted">Once this PC has installed an update, its file is kept so you can send it on. New updates come from the
+      Fortis Ledger build on GitHub ({{ ext }} files).</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="feature"><span class="feature-icon">{{ m.icon("desktop") }}</span><div><h2>This PC</h2></div></div>
+    <dl class="facts">
+      <dt>Running</dt><dd>Fortis Ledger {{ st.running }}</dd>
+      {% if cur.version %}<dt>Last update</dt><dd>{{ cur.version }}{% if cur.installed %}, installed {{ cur.installed|when }}{% endif %}</dd>{% endif %}
+      <dt>Program</dt><dd>{% if st.runtime %}Installed (runtime {{ st.runtime }}){% else %}Runs from its source folder{% endif %}</dd>
+    </dl>
+    {% if st.runtime and cur.version and not st.set_aside %}
+    <details>
+      <summary>Go back to the version installed with the program</summary>
+      <p class="help">If an update causes a problem, Fortis Ledger can start with the version the installer put on this PC.
+        Installing any later update switches back to updates.</p>
+      {{ m.post_button(url_for('ui.updates_use_installed'), "Use the installed version", "btn",
+                       confirm="Start Fortis Ledger with the version installed with the program from the next restart?") }}
+    </details>
+    {% endif %}
+    <details>
+      <summary>How updates work</summary>
+      <ul class="small">
+        <li>An update holds only Fortis Ledger's own code - under 1 MB, not the full installer.</li>
+        <li>GitHub signs each one for the firm's build. Fortis Ledger checks that signature and every file before it installs one, so a
+          changed or look-alike file is refused.</li>
+        <li>It is installed for you alone (no administrator rights needed) and starts the next time Fortis Ledger opens.</li>
+        <li>When an update needs new parts of the program itself, it says so: install that version with the full installer instead.</li>
+      </ul>
+    </details>
+  </div>
+</div>
+{% endblock %}

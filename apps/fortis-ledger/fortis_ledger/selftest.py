@@ -29,7 +29,8 @@ def run() -> int:
     from .store import FolderStore
 
     out: list[str] = [f"Fortis Ledger {__version__} self-test {dt.datetime.now():%Y-%m-%d %H:%M:%S}",
-                      f"report engine: {ENGINE_DIR}", f"report codes known: {len(report_code_options())}"]
+                      f"code: {Path(__file__).resolve().parent}", f"report engine: {ENGINE_DIR}",
+                      f"report codes known: {len(report_code_options())}"]
     ok = True
     with tempfile.TemporaryDirectory(prefix="fortis-ledger-selftest-", ignore_cleanup_errors=True) as d:
         st = FolderStore(Path(d) / "library", user="self-test", machine="self-test")
@@ -190,6 +191,7 @@ def _screens(d: Path) -> list[str]:
         banked = next((c.slug for c in clients if c.name == "Self Test Bank"), slug)
         app = create_app(Settings(data_folder=str(library), user_name="self-test"), token="self-test",
                          work_dir=d / "work")
+        app.config["UPDATE_CHECKS"] = False
         c = app.test_client()
         c.get("/?token=self-test")
         bad = []
@@ -197,7 +199,7 @@ def _screens(d: Path) -> list[str]:
                      f"/c/{slug}/year-end", f"/c/{slug}/profit-and-loss", f"/c/{slug}/balance-sheet",
                      f"/c/{banked}/bank", f"/c/{banked}/gst-report", f"/c/{banked}/journals/new",
                      *(f"/c/{banked}/bank/{code}" for code in FolderStore(library).list_bank_accounts(banked)),
-                     "/xero", "/firm", "/setup",
+                     f"/c/{slug}/details", "/xero", "/firm", "/setup", "/team", "/updates",
                      "/signin?again=1", "/static/app.css", "/static/fortis-logo.svg"):
             r = c.get(path)
             if r.status_code != 200 or (path.startswith("/c/") and b'id="i-home"' not in r.data):

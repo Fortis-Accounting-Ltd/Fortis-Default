@@ -119,6 +119,8 @@
   </div>
 </form>
 
+{% if access and not new %}{% include "_access.html" %}{% endif %}
+
 {% if not new and not readonly %}
 <details class="panel danger-zone">
   <summary>Archive this client</summary>

@@ -25,12 +25,13 @@ from .. import bank as bankmod, claude_desktop, imports, reports, shortcut, stat
 from ..chartbook import ACCOUNT_TYPES, ChartError, ClientChart, default_report_code
 from ..engine import chartlib, describe, report_code_options
 from ..ledger import Ledger, LedgerError, ValidationError, journal_from_form
-from ..model import ENTITY_TYPES, Client, Journal, Line, parse_date
+from ..model import ENTITY_TYPES, Client, Journal, Line, now_iso, parse_date
 from ..money import ZERO
 from ..msauth import MicrosoftConfig, MicrosoftSignIn, domains
 from ..oauth import SignInError
 from ..settings import suggest_folders
 from ..store import FolderStore, LockedError, StoreError
+from ..team import Team, norm
 from ..xero_connect import DEFAULT_PORT as XERO_PORT, SCOPES as XERO_SCOPES, XeroConfig, XeroSession, has_balances, year_ends
 from . import ENTITY_LABELS, release_locks
 
@@ -39,6 +40,9 @@ bp = Blueprint("ui", __name__)
 PID_RE = re.compile(r"^[0-9a-f]{16}$")
 NO_SETUP_NEEDED = {"ui.setup", "ui.quit", "ui.alive"}
 SIGNIN_OPEN = {"ui.signin", "ui.signin_start", "ui.signin_status", "ui.signin_cancel", "ui.signin_start_get"}
+TEAM_OPEN = SIGNIN_OPEN | {"ui.signout"}            # open to people the team has not given access
+ADMIN_ONLY = {"ui.firm_settings", "ui.client_archive", "ui.team_access", "ui.team_move",
+              "ui.updates_share"}                    # when the firm manages access
 LOCK_ENDPOINTS = {"ui.lock_heartbeat", "ui.lock_take", "ui.lock_release"}
 EDITABLE_KINDS = {"manual", "reversal", "opening"}
 HEARTBEAT_WRITE_SECONDS = 60
@@ -94,6 +98,36 @@ def ms_config(m: dict | None = None) -> MicrosoftConfig | None:
 
 def signin_required() -> bool:
     return bool((firm().get("microsoft") or {}).get("required")) and ms_config() is not None
+
+
+def team() -> Team:
+    """Who may open which client (team.json in the data folder)."""
+    if "team" not in g:
+        g.team = Team.load(store().read_team()) if settings().configured and store().is_initialised() else Team()
+    return g.team
+
+
+def me() -> str:
+    """The signed-in office email ('' when nobody is signed in)."""
+    return norm((session.get("ms_user") or {}).get("email") or "")
+
+
+def managing() -> bool:
+    """The firm manages access and can apply it: office sign-in is required, so everyone is known."""
+    return team().managed and signin_required()
+
+
+def is_admin() -> bool:
+    return not managing() or team().is_admin(me())
+
+
+def can_open(slug: str) -> bool:
+    return not managing() or team().can_open(me(), slug)
+
+
+def admin_names() -> str:
+    t = team()
+    return ", ".join(t.name(e) for e in t.admins()) or "an admin"
 
 
 def xero_config() -> XeroConfig | None:
@@ -213,6 +247,24 @@ def _pull_slug(endpoint, values):
     g.slug = (values or {}).get("slug")
 
 
+def _team_gate():
+    """The firm manages access: let in the people it allows, and only to what they may open."""
+    t, email = team(), me()
+    if t.role(email) is None and t.join == "auto" and email:
+        name = (session.get("ms_user") or {}).get("name") or ""
+        t.set_person(email, name, "staff", by="joined at first sign-in", at=now_iso())
+        store().save_team(t.to_dict(), "team.joined", {"email": email, "name": name})
+    if not t.can_use(email):
+        return render_template("error.html", code=403, message=(
+            f"{email or 'This account'} cannot use the firm's Fortis Ledger clients yet. Ask {admin_names()} to give "
+            f"you access, then open Fortis Ledger again.")), 403
+    if request.endpoint in ADMIN_ONLY and not t.is_admin(email):
+        abort(403, f"Only an admin can do that - ask {admin_names()}.")
+    if g.slug and not t.can_open(email, g.slug):
+        abort(403, f"You do not have access to this client. Ask {admin_names()} if you need it.")
+    return None
+
+
 @bp.before_request
 def _context():
     if request.endpoint in NO_SETUP_NEEDED:
@@ -227,6 +279,10 @@ def _context():
     if request.endpoint not in SIGNIN_OPEN and signin_required() and not session.get("ms_user"):
         nxt = request.full_path if request.method == "GET" and request.path != "/" else None
         return redirect(url_for("ui.signin", next=nxt))
+    if managing() and request.endpoint not in TEAM_OPEN:
+        refused = _team_gate()
+        if refused is not None:
+            return refused
     if not g.slug:
         return None
     try:
@@ -370,6 +426,8 @@ def clients():
     release_locks(current_app)                 # leaving a client hands its edit lock back
     rows = []
     for c in st.list_clients():
+        if not can_open(c.slug):
+            continue
         info = st.lock_info(c.slug)
         rows.append({"c": c, "years": st.list_years(c.slug), "last": st.last_audit(c.slug),
                      "lock": info if info and not info["mine"] and not info["stale"] else None})
@@ -1474,16 +1532,18 @@ def _user_globals():
     initials = "".join(p[0] for p in name.replace(".", " ").split()[:2]).upper() or "?"
     try:
         required = settings().configured and store().is_initialised() and signin_required()
+        admin = is_admin()
     except StoreError:
-        required = False
+        required, admin = False, True
     nav_tab = TAB_OF.get(request.endpoint or "") or GLOBAL_TAB.get(request.endpoint or "", "")
     return {"user_name": name, "user_email": signed.get("email", ""), "user_initials": initials,
             "signed_in": bool(signed), "signin_required": required, "icons_possible": shortcut.available(),
-            "nav_tab": nav_tab}
+            "nav_tab": nav_tab, "user_is_admin": admin}
 
 
 GLOBAL_TAB = {"ui.clients": "clients", "ui.client_new": "clients", "ui.xero_home": "xero", "ui.xero_org": "xero",
-              "ui.migrate": "xero", "ui.setup": "settings", "ui.firm_settings": "settings"}
+              "ui.migrate": "xero", "ui.setup": "settings", "ui.firm_settings": "settings", "ui.team_page": "team",
+              "ui.updates_page": "settings"}
 
 
 # ---------------------------------------------------------------------------------------- #
@@ -1611,6 +1671,10 @@ def firm_settings():
                 return redirect(url_for("ui.signin_start_get"))
             tested = session.get("ms_tested") or {}
             required = request.form.get("required") == "yes"
+            if team().managed and not required:
+                flash("The firm manages who can open which client (Team), so office sign-in must stay required - "
+                      "stop managing access on the Team page first.", "error")
+                return _firm_page(f, request.form)
             same = tested.get("tenant_id") == m["tenant_id"] and tested.get("client_id") == m["client_id"]
             if required and not same:
                 flash("Sign in once with these details (Test sign-in) before making sign-in required - "
@@ -1621,6 +1685,10 @@ def firm_settings():
                                        else "details saved (sign-in is not required yet)."), "ok")
             return redirect(url_for("ui.firm_settings"))
         if op == "ms_off":
+            if team().managed:
+                flash("The firm manages who can open which client (Team), so office sign-in must stay required - "
+                      "stop managing access on the Team page first.", "error")
+                return redirect(url_for("ui.firm_settings"))
             m = dict(f.get("microsoft") or {})
             m["required"] = False
             st.save_firm_settings({"microsoft": m})

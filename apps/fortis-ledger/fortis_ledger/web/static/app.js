@@ -355,6 +355,60 @@
     totals();
   }
 
+  // live notes: ask now and then whether a colleague (or Claude) has changed what this screen shows
+  var pulse = document.body.getAttribute("data-pulse");
+  var liveBanner = document.getElementById("live-banner");
+  if (pulse && liveBanner && window.fetch) {
+    var since = document.body.getAttribute("data-pulse-since") || "";
+    var ro = document.body.getAttribute("data-pulse-ro");
+    var every = Number(document.body.getAttribute("data-pulse-every")) || 10;
+    var liveShown = false;
+    document.getElementById("live-refresh").addEventListener("click", function (ev) {
+      ev.preventDefault();
+      window.location.assign(window.location.pathname + window.location.search);   // a fresh GET, never a re-sent form
+    });
+    var ask = function () {
+      if (liveShown || document.hidden) return;
+      fetch(pulse + "?since=" + encodeURIComponent(since) + (ro ? "&ro=1" : ""),
+            { credentials: "same-origin", headers: { "Accept": "application/json" } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d || !d.message) return;
+          document.getElementById("live-text").textContent = d.message;
+          liveBanner.classList.remove("hidden");
+          liveShown = true;
+        })
+        .catch(function () { /* the app is closing */ });
+    };
+    setInterval(ask, every * 1000);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) ask(); });
+  }
+
+  // copy a text box's text (the invite email)
+  document.querySelectorAll("[data-copy]").forEach(function (btn) {
+    var source = document.getElementById(btn.getAttribute("data-copy"));
+    if (!source) return;
+    btn.classList.remove("hidden");
+    btn.addEventListener("click", function () {
+      var label = btn.innerHTML;
+      var done = function () {
+        btn.textContent = btn.getAttribute("data-copied") || "Copied";
+        setTimeout(function () { btn.innerHTML = label; }, 1500);
+      };
+      var fallback = function () { source.select(); document.execCommand("copy"); done(); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(source.value).then(done, fallback);
+      else fallback();
+    });
+  });
+
+  // access to a client: ticking a person means "only these people"
+  document.querySelectorAll(".access-people input[type=checkbox]").forEach(function (cb) {
+    cb.addEventListener("change", function () {
+      var named = cb.form.querySelector("input[name=mode][value=named]");
+      if (cb.checked && named) named.checked = true;
+    });
+  });
+
   // import preview: show the inputs that match each line's action
   document.querySelectorAll("[data-plan-action]").forEach(function (sel) {
     sel.addEventListener("change", function () {

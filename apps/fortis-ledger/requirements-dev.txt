@@ -3,6 +3,8 @@ pytest>=8
 pypdf>=4
 pyflakes>=3
 pyinstaller>=6.0
+# a stand-in for GitHub's signing key, to test the checks on update files (not part of the app)
+cryptography>=42
 # the official MCP client, to test the Claude connector against it (not part of the app)
 mcp>=2.0
 # optional - the real-browser test (tests/test_ui_browser.py) needs:

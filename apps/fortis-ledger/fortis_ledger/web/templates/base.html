@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ VERSION }}">
   <script src="{{ url_for('static', filename='app.js') }}?v={{ VERSION }}" defer></script>
 </head>
-<body class="{% block body_class %}{% endblock %}" data-csrf="{{ csrf_token() }}"{% if client and not readonly %} data-heartbeat="{{ url_for('ui.lock_heartbeat', slug=client.slug) }}"{% endif %}{% if browser_mode %} data-alive="{{ url_for('ui.alive') }}"{% endif %}>
+<body class="{% block body_class %}{% endblock %}" data-csrf="{{ csrf_token() }}"{% if client and not readonly %} data-heartbeat="{{ url_for('ui.lock_heartbeat', slug=client.slug) }}"{% endif %}{% if browser_mode %} data-alive="{{ url_for('ui.alive') }}"{% endif %}{% if pulse %} data-pulse="{{ pulse.url }}" data-pulse-since="{{ pulse.since }}" data-pulse-every="{{ pulse.every }}"{% if pulse.ro %} data-pulse-ro="1"{% endif %}{% endif %}>
 {% include "_icons.html" %}
 {% block shell %}
 <div class="shell">
@@ -49,6 +49,7 @@
     {% endif %}
     <nav class="side-nav side-bottom">
       {{ m.nav("clients", url_for('ui.clients'), "All clients", "users", nav_tab) }}
+      {{ m.nav("team", url_for('ui.team_page'), "Team", "team", nav_tab) }}
       {{ m.nav("xero", url_for('ui.xero_home'), "Connect to Xero", "link", nav_tab) }}
       {{ m.nav("settings", url_for('ui.setup'), "Settings", "settings", nav_tab) }}
     </nav>
@@ -81,7 +82,9 @@
           {{ m.icon("chevron", "ic chev") }}</summary>
         <div class="menu" role="menu">
           <a href="{{ url_for('ui.setup') }}" role="menuitem">{{ m.icon("settings") }} Settings</a>
-          <a href="{{ url_for('ui.firm_settings') }}" role="menuitem">{{ m.icon("building") }} Firm settings</a>
+          {% if user_is_admin %}<a href="{{ url_for('ui.firm_settings') }}" role="menuitem">{{ m.icon("building") }} Firm settings</a>{% endif %}
+          <a href="{{ url_for('ui.team_page') }}" role="menuitem">{{ m.icon("team") }} Team</a>
+          <a href="{{ url_for('ui.updates_page') }}" role="menuitem">{{ m.icon("refresh") }} Updates</a>
           {% if signed_in %}
           <form method="post" action="{{ url_for('ui.signout') }}">{{ m.csrf() }}<button role="menuitem">{{ m.icon("logout") }} Sign out</button></form>
           {% elif not signin_required %}
@@ -104,6 +107,21 @@
     {% endif %}
     <div class="banner warn hidden" id="lock-lost">Someone else has taken over editing this client. Reload the page - your changes can no longer be saved.</div>
     {% endif %}
+    {% if pulse %}
+    <div class="banner info hidden" id="live-banner" role="status">{{ m.icon("refresh") }}<span id="live-text"></span>
+      <a class="btn small" id="live-refresh" href="">Refresh</a></div>
+    {% endif %}
+    {% if update_banner and request.endpoint != "ui.updates_page" %}
+    <div class="banner info" id="update-banner">{{ m.icon("refresh") }}
+      {% if update_banner.restart %}
+      <span>Fortis Ledger {{ update_banner.restart }} is installed - restart Fortis Ledger to start using it.</span>
+      {{ m.post_button(url_for('ui.updates_restart'), "Restart now", "btn small", confirm="Restart Fortis Ledger now? Anything not saved on this screen is lost.") }}
+      {% else %}
+      <span>Fortis Ledger {{ update_banner.available }} is available - an admin shared it with everyone.</span>
+      <a class="btn small" href="{{ url_for('ui.updates_page') }}">See the update</a>
+      {% endif %}
+    </div>
+    {% endif %}
     <main class="page">
       {% with msgs = get_flashed_messages(with_categories=true) %}
         {% for cat, msg in msgs %}<div class="flash {{ cat }}" role="status">{{ m.icon({"ok": "check", "error": "alert", "warn": "alert"}.get(cat, "info")) }}<span>{{ msg }}</span></div>{% endfor %}
@@ -112,7 +130,7 @@
     </main>
     <footer class="foot">
       <span>Data folder: {{ settings.data_folder or "not set" }}</span>
-      <span>Fortis Ledger {{ VERSION }}</span>
+      <a href="{{ url_for('ui.updates_page') }}" class="muted">Fortis Ledger {{ VERSION }}</a>
     </footer>
   </div>
 </div>

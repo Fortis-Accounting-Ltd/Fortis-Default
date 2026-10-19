@@ -176,7 +176,7 @@ input, select, textarea { font: inherit; color: inherit; border: 1px solid var(-
 input, select { min-height: 38px; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: #84adff; box-shadow: 0 0 0 4px rgba(0, 80, 200, 0.12); }
 input[readonly], fieldset:disabled input, fieldset:disabled select, fieldset:disabled textarea { background: #f9fafb; color: var(--muted); }
-input[type="checkbox"] { min-height: 0; width: 16px; height: 16px; accent-color: var(--blue); box-shadow: none; }
+input[type="checkbox"], input[type="radio"] { min-height: 0; width: 16px; height: 16px; accent-color: var(--blue); box-shadow: none; }
 input[type="file"] { padding: 6px; background: #f9fafb; }
 textarea { width: 100%; resize: vertical; }
 fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
@@ -204,6 +204,9 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .check .help { display: inline; margin: 0; }
 .check.attention { background: var(--warn-bg); padding: 8px 10px; border-radius: 8px; }
 .choices { margin: 4px 0 0; padding-left: 18px; }
+.access-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0 16px; padding-left: 24px; }
+.access-people .check { margin: 4px 0; }
+#invite-text { font-size: 12.5px; color: var(--ink-2); background: #f9fafb; }
 .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
 .toolbar input[type="search"] { min-width: 280px; }
 .options { margin: 14px 0; }

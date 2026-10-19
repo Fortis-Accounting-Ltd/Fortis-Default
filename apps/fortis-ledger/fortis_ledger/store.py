@@ -4,7 +4,10 @@ library synced to the PC by OneDrive.  SharePoint keeps a version history of eve
 adds a change log per client and a soft edit lock so two people don't change one client at once.
 
 <root>/
-  fortis-ledger.json                    marker and format version
+  fortis-ledger.json                    marker and format version, and the firm's settings
+  team.json                             who may open which client (when the firm manages access)
+  firm-log.jsonl                        the firm's change log: team access, updates shared with everyone
+  updates/*.fortisupdate                Fortis Ledger updates shared with everyone who uses the folder
   charts/<type>.csv                     firm master charts (copied from the skill on first use)
   clients/<slug>/
     client.json                         entity facts, report options, labels
@@ -172,6 +175,33 @@ class FolderStore:
         data["updated"] = {"by": self.user, "at": now_iso()}
         write_json(self.root / MARKER, data)
         return data
+
+    # ---- the team: who may open which client (its own file, so it never clashes with other settings) ---- #
+    def read_team(self) -> dict:
+        return read_json(self.root / "team.json", {}, quiet=True) or {}
+
+    def save_team(self, data: dict, action: str, detail: dict) -> None:
+        write_json(self.root / "team.json", {**data, "updated": {"by": self.user, "at": now_iso()}})
+        self.log_firm(action, detail)
+
+    def log_firm(self, action: str, detail: dict) -> None:
+        """The firm's own change log (team access, updates shared with everyone), like a client's change log."""
+        rec = {"at": now_iso(), "user": self.user, "machine": self.machine, "action": action, "detail": detail}
+        with open(self.root / "firm-log.jsonl", "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+
+    def read_firm_log(self, limit: int = 200) -> list[dict]:
+        path = self.root / "firm-log.jsonl"
+        rows = []
+        if path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        return list(reversed(rows))[:limit]
 
     def firm_chart_path(self, etype: str) -> Path:
         fname = chartlib.CHART_FILES[chartlib.canonical_type(etype)]
@@ -375,6 +405,25 @@ class FolderStore:
             except json.JSONDecodeError:
                 continue
         return None
+
+    def audit_tail(self, slug: str, max_bytes: int = 65536) -> list[dict]:
+        """The newest change-log entries, newest first (read from the end of the file, so it stays quick)."""
+        path = self.client_dir(slug) / "audit.jsonl"
+        try:
+            with open(path, "rb") as fh:
+                fh.seek(0, os.SEEK_END)
+                size = fh.tell()
+                fh.seek(max(0, size - max_bytes))
+                lines = fh.read().decode("utf-8", "replace").splitlines()
+        except FileNotFoundError:
+            return []
+        out = []
+        for line in reversed(lines[1:] if size > max_bytes else lines):     # the first may be cut short
+            try:
+                out.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+        return out
 
     def read_audit(self, slug: str, limit: int = 500) -> list[dict]:
         path = self.client_dir(slug) / "audit.jsonl"

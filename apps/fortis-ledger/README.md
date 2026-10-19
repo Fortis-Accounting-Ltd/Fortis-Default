@@ -27,7 +27,9 @@ changes the skill. The two are separate from now on: a change to one does not re
 | **Move a client off Xero** | **Connect to Xero** signs in to Xero from the app and brings a client's chart and year-end trial balances straight across (read only), then disconnects it. Or give the app the client's Xero chart export and trial balance exports. Either way, every year's closing balances match Xero. |
 | **Claude** | Claude (the Claude desktop app, or Claude Code) can read a client's ledger and prepare journals on a PC where Fortis Ledger is installed - "journal depreciation of $4,500 for ... at 30 June". It works through the same rules as the screens; it posts the journals you ask it to post (a partner can turn that off, and Claude then saves drafts for a person to post), and every change is marked *via Claude* in the change log. |
 | **Office sign-in** | Optional: everyone signs in with their Fortis Microsoft 365 email. The change log and the edit lock then show the verified email instead of a typed name. |
+| **Team** | Everyone works on the same clients through the SharePoint library. With office sign-in required, admins choose who may use Fortis Ledger and limit a client to the people who work on it - on every screen and in Claude. An open screen says when a colleague (or Claude) has changed what it shows. |
 | **Installer** | One file, `Fortis-Ledger-Setup-<version>.exe`, to share with staff. It installs without administrator rights and puts a *Fortis Ledger* icon on the desktop, plus a *Fortis Ledger - Connect to Xero* icon that opens straight at Connect to Xero. |
+| **Updates** | After that, changes come as a small update file (`.fortisupdate`, under 1 MB): email it, or an admin shares it with everyone from inside the app. GitHub signs each one for the firm's build, and Fortis Ledger checks it before it goes in. |
 
 ## Setting up the SharePoint library (once, for the firm)
 
@@ -63,6 +65,41 @@ in an allowed domain. Then the change log, the edit lock and the Overview show t
 saved on the PC, only the last email used, so it can be offered next time. Each time the app opens, it signs in
 again. **Firm settings > Stop requiring sign-in** turns it off again for everyone.
 
+## Working as a team
+
+**Sharing the client files.** Everyone syncs the same SharePoint library (above), so a client set up on one PC
+is on every PC a few seconds later. **Team** (in the side bar) shows where this PC's data folder is: in
+SharePoint, in your own OneDrive, or only on this PC. If it is not in SharePoint yet, *Move the data folder into
+SharePoint* copies every client into a library synced to this PC, checks the copy and switches to it (the old
+folder is left as it was). *Invite a colleague* writes the email with the three steps: install, sync the
+library, open Fortis Ledger.
+
+**Working at the same time.** One person changes a client at a time (the edit lock); others can open it read
+only. Each open screen checks every 10 seconds (the client list every 30) whether a colleague or Claude has
+changed what it shows, and then says who changed what, with a *Refresh* button. A read-only screen also says
+when the person editing has finished.
+
+**Who can open which client.** Access is by office email, so office sign-in must be required first (above).
+Then, on **Team**:
+
+1. Click **Manage access**. You become the first admin. Choose whether new people *join as staff when they
+   first sign in* or *need an admin to add them*.
+2. Add people as **Admin**, **Staff** or **No access**. Admins can open every client, and manage the team, the
+   firm settings, client archiving, moving the data folder and sharing updates with everyone. Staff can open
+   every client that is not limited to others. No access shuts someone out.
+3. To limit a client, open it and go to **Client details > Access > Only these people**. Admins can always
+   open it.
+
+The rules are kept in the data folder (`team.json`), so every PC applies the same ones, and they apply to
+Claude too: Claude only sees the clients the person using it may open. The Team page lists every change to
+the team (`firm-log.jsonl`). While access is managed, office sign-in cannot be turned off; *Stop managing
+access* first.
+
+Fortis Ledger applies these rules, but the files themselves are in the SharePoint library, so anyone who
+syncs it can still open them outside the app. For a client that must stay private, also limit its folder
+(`clients\<client>`) in SharePoint to the same people (the folder's *Manage access*, stop inheriting
+permissions).
+
 ## Installing it
 
 The installer is one file, `Fortis-Ledger-Setup-<version>.exe`. Share it with staff, for example from
@@ -83,8 +120,8 @@ It installs for the person running it, in `%LOCALAPPDATA%\Programs\Fortis Ledger
 rights are needed. It adds a Start menu entry. The program opens in its own window, which uses the Edge
 WebView2 runtime that comes with Windows 10 and 11.
 
-- **Updating:** run the newer `Fortis-Ledger-Setup` file. It replaces the old version, and everything else
-  is kept: the ledger, your settings and your icons.
+- **Updating:** install the update files (see *Updates* below). A newer `Fortis-Ledger-Setup` file also
+  works: it replaces the old version, and everything else is kept: the ledger, your settings and your icons.
 - **Uninstalling:** go to Settings > Apps > Fortis Ledger > Uninstall. This removes the program and its
   icons only. The ledger in SharePoint and your settings stay.
 - **For IT:**
@@ -95,6 +132,35 @@ WebView2 runtime that comes with Windows 10 and 11.
 
 **Settings > Desktop icons** adds an icon again if one was deleted. To open the app at a particular screen,
 use `"Fortis Ledger.exe" --start xero` or `--start settings`.
+
+## Updates
+
+From 0.2.0 on, changes come as an update file, `Fortis-Ledger-Update-<version>.fortisupdate` (under 1 MB,
+just Fortis Ledger's own code), instead of a new installer. Each run of the *Fortis Ledger* workflow on
+GitHub (Actions) keeps one, as **Fortis-Ledger-Update**.
+
+- **By email:** attach the file to an email. Whoever double-clicks it on a PC with Fortis Ledger sees the
+  **Updates** screen: the version, and the branch, commit and build it came from. **Install**, then
+  **Restart now**.
+- **For everyone at once:** an admin ticks *Also share it with everyone* when installing it (or clicks
+  **Updates > Share with everyone**). The file goes into the data folder (`updates/`), and every PC that uses
+  the folder shows *Fortis Ledger X is available*.
+- An update is installed for the person (no administrator rights), in `%LOCALAPPDATA%\Fortis Ledger\updates`,
+  beside the program rather than over it. It starts the next time Fortis Ledger opens. **Updates > Send it by
+  email > Show the file** finds the file again to send it on.
+
+Each update is signed by GitHub for the firm's build: the build asks GitHub Actions for an identity token
+naming the update's list of files and their SHA-256 hashes, and that token, signed with GitHub's key, travels
+in the file. Fortis Ledger installs an update only if GitHub's signature checks out, the token was issued to
+this repository's *Fortis Ledger* workflow, and every file matches the list. So an update that arrives by
+email, or that someone puts in the shared folder, can only carry what the firm's build made. (Anyone who can
+change this repository's code can make an update, as they can make an installer.) No signing key or password
+needs looking after.
+
+If an update does not start, Fortis Ledger starts the version the installer put on the PC and says so on the
+Updates screen; **Updates > Use the installed version** does the same by hand. When an update needs new parts
+of the program itself (a new Python or library), it says so: install that version with its full installer
+instead. For IT: `fortis-ledger-mcp.exe --install-update <file> --yes` installs one without asking.
 
 ## Running it without installing
 
@@ -119,9 +185,11 @@ To build the Windows app and its installer yourself, install [Inno Setup](https:
 6.7 or later, then run `powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1`. The installer
 is made by `packaging\installer.iss`.
 
-`packaging\test_installer.ps1 dist\Fortis-Ledger-Setup-<version>.exe` checks the installer the way staff
-will use it: it installs Fortis Ledger, checks the icons, self-tests the installed copy, installs again
-over the top, and uninstalls it. CI runs it on every build.
+`packaging\test_installer.ps1 dist\Fortis-Ledger-Setup-<version>.exe [update file]` checks the installer the
+way staff will use it: it installs Fortis Ledger, checks the icons and that update files open in it,
+self-tests the installed copy, installs the update file and self-tests again, checks that a changed update
+file is refused and that an update which does not start is set aside, installs again over the top, and
+uninstalls it. CI runs it on every build, with an update file GitHub signed for that build.
 
 ## Moving a client off Xero
 
@@ -266,7 +334,10 @@ Plain files, so nothing is locked inside the app:
 
 ```
 <library>/
-  fortis-ledger.json              marks the folder as a Fortis Ledger data folder
+  fortis-ledger.json              marks the folder as a Fortis Ledger data folder; the firm's settings
+  team.json                       who may open which client (when the firm manages access)
+  firm-log.jsonl                  the firm's change log: the team, updates shared with everyone, folder moves
+  updates/                        update files an admin shared with everyone
   charts/<type>.csv               the firm's master charts
   clients/<client>/
     client.json                   entity details, report options
@@ -322,8 +393,23 @@ The plan is to add the asset register next.
   is Connect to Xero (Organisation, Accounts and Reports/TrialBalance, read only). `shortcut.py` makes the
   desktop icons with Windows' own shortcut maker.
 - Firm-wide settings (the office sign-in IDs, the Xero client id) are kept in `fortis-ledger.json` in the
-  data folder, so every PC uses the same ones. They are IDs, not secrets.
-- Tests: `python -m pip install -r requirements-dev.txt && python -m pytest -q tests`.
+  data folder, so every PC uses the same ones. They are IDs, not secrets. `team.py` is who may open which
+  client (`team.json`); `web/views.py` applies it to every request and `connector.py` to Claude.
+  `web/teamviews.py` is the Team screen, the Access card, moving the data folder, and the live notes
+  (`/pulse`: a screen is shown with a mark of the client's newest change-log entry, and asks what came after
+  it - so PCs' clocks do not matter).
+- Updates: the build bundles the app's own code (`fortis_ledger`) as plain files, not inside the program, and
+  all of the standard library and the libraries the app uses, so an update can be just that code.
+  `packaging/make_update.py` makes an update file and, in GitHub Actions, gets it signed (the job needs
+  `id-token: write`). `updates.py` checks one (GitHub's RS256 signature in plain Python, the token's issuer,
+  repository, workflow and audience, and each file's hash) and installs it; `packaging/launch.py` starts the
+  newest installed update made for its `RUNTIME`, and falls back to the program's own copy if it does not
+  load. Raise `RUNTIME` in `launch.py` when the Python version or a library changes: older programs then ask
+  for the full installer. `github_oidc_keys.json` is a copy of GitHub's public keys; a key added since is
+  fetched from GitHub. `web/updateviews.py` is the Updates screen.
+- Tests: `python -m pip install -r requirements-dev.txt && python -m pytest -q tests`. `tests/test_updates.py`
+  signs updates with a test key standing in for GitHub's; `tests/test_team.py` covers access, live notes and
+  moving the data folder.
   `tests/test_ui_browser.py` drives the screens in Chromium when Playwright is installed.
   `tests/fake_oauth.py` stands in for Xero and Microsoft on 127.0.0.1: like the real services, it checks the
   PKCE challenge, the client ID and the redirect URI. That way both sign-ins are tested end to end without

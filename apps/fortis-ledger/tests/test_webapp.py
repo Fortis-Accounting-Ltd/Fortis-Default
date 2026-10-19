@@ -466,7 +466,8 @@ def test_every_screen_renders(web, company):
                  f"/c/{company}/account-transactions", f"/c/{company}/account-transactions?code=72930",
                  f"/c/{company}/reports", f"/c/{company}/year-end", f"/c/{company}/changes", f"/c/{company}/details",
                  f"/c/{company}/trial-balance?fy=2027", f"/c/{company}/journals?fy=2027",
-                 f"/c/{company}/profit-and-loss?fy=2027", f"/c/{company}/bank?fy=2027"]:
+                 f"/c/{company}/profit-and-loss?fy=2027", f"/c/{company}/bank?fy=2027", "/team", "/updates",
+                 f"/pulse/{company}", "/pulse"]:
         r = web.get(path)
         assert r.status_code == 200, (path, r.status_code, text(r)[:500])
         assert "<script>" not in r.get_data(as_text=True)          # no inline script (the CSP forbids it)

@@ -10,6 +10,8 @@
 ;   icons only: the ledger in SharePoint and the person's settings are kept.
 ; - Silent install, e.g. for Intune:  Fortis-Ledger-Setup-<version>.exe /VERYSILENT /SUPPRESSMSGBOXES
 ;   (add /TASKS=desktopicon,xeroicon to choose the icons).
+; - Update files (.fortisupdate - see fortis_ledger/updates.py) open in Fortis Ledger, which checks them and asks
+;   before installing them.  Installed updates live in %LOCALAPPDATA%\Fortis Ledger\updates; uninstalling removes them.
 
 #define AppName "Fortis Ledger"
 #define AppExe "Fortis Ledger.exe"
@@ -57,6 +59,7 @@ SolidCompression=yes
 CloseApplications=yes
 RestartApplications=no
 SetupLogging=yes
+ChangesAssociations=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -78,6 +81,14 @@ Source: "..\dist\Fortis Ledger\*"; DestDir: "{app}"; Flags: ignoreversion recurs
 ; tells the app that this installer looks after the desktop icons (so it does not add its own)
 Source: "install.ini"; DestDir: "{app}"; Flags: ignoreversion
 
+[Registry]
+; update files open in Fortis Ledger (HKA: this person's own settings, or the PC's for an /ALLUSERS install)
+Root: HKA; Subkey: "Software\Classes\.fortisupdate"; ValueType: string; ValueName: ""; ValueData: "FortisLedger.Update"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.fortisupdate\OpenWithProgids"; ValueType: string; ValueName: "FortisLedger.Update"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\FortisLedger.Update"; ValueType: string; ValueName: ""; ValueData: "Fortis Ledger update"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\FortisLedger.Update\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"
+Root: HKA; Subkey: "Software\Classes\FortisLedger.Update\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" --install-update ""%1"""
+
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Comment: "The firm's ledger and Financial Reports"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Comment: "The firm's ledger and Financial Reports"; Tasks: desktopicon
@@ -90,3 +101,5 @@ Filename: "{app}\{#AppExe}"; Description: "Open Fortis Ledger now"; Flags: nowai
 ; icons the app itself made on this person's desktop (Settings > Desktop icons)
 Type: files; Name: "{userdesktop}\{#AppName}.lnk"
 Type: files; Name: "{userdesktop}\{#AppName} - Connect to Xero.lnk"
+; the updates this person installed (a later install starts from the program's own version)
+Type: filesandordirs; Name: "{localappdata}\{#AppName}\updates"
