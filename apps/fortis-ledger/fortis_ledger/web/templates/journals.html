@@ -1,0 +1,53 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Journals{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Journals <span class="muted">FY{{ fy }}</span></h1>
+  {% if started and not readonly and not year_locked %}
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('ui.journal_new', slug=client.slug, fy=fy) }}">New journal</a>
+    <a class="btn" href="{{ url_for('ui.import_start', slug=client.slug, fy=fy) }}#journals">Import journals</a>
+  </div>
+  {% endif %}
+</div>
+{% if not started %}
+<div class="panel">FY{{ fy }} has not been started. <a href="{{ url_for('ui.overview', slug=client.slug) }}">Overview</a></div>
+{% else %}
+<div class="toolbar">
+  <div class="segmented">
+    {% for s, label in [("all", "All"), ("posted", "Posted"), ("draft", "Draft"), ("void", "Void")] %}
+    <a href="{{ url_for('ui.journals', slug=client.slug, fy=fy, status=s, kind=kind, q=q) }}"{% if status == s %} class="active"{% endif %}>{{ label }}
+      <span class="count">{{ counts.values()|sum if s == "all" else counts.get(s, 0) }}</span></a>
+    {% endfor %}
+  </div>
+  <form method="get" class="inline">
+    <input type="hidden" name="fy" value="{{ fy }}"><input type="hidden" name="status" value="{{ status }}">
+    <select name="kind" aria-label="Type" data-autosubmit>
+      <option value="">All types</option>
+      {% for k in ["manual", "import", "opening", "close", "reversal"] %}<option value="{{ k }}"{% if kind == k %} selected{% endif %}>{{ m.kind_label(k) }}</option>{% endfor %}
+      <option value="bank"{% if kind == "bank" %} selected{% endif %}>Bank transactions</option>
+    </select>
+    <input type="search" name="q" value="{{ q }}" placeholder="Narration, number or account" aria-label="Search journals">
+    <button class="btn">Search</button>
+  </form>
+</div>
+<table class="grid">
+  <thead><tr><th>Date</th><th>Number</th><th>Narration</th><th>Type</th><th>Status</th><th class="num">Amount</th></tr></thead>
+  <tbody>
+  {% for j in journals %}
+  <tr class="{{ j.status }}">
+    <td class="nowrap">{{ j.date|dmy }}</td>
+    <td class="nowrap"><a href="{{ url_for('ui.journal_view', slug=client.slug, jfy=fy, number=j.number) }}">{{ j.number }}</a></td>
+    <td>{{ j.narration or "(no narration)" }}{% if j.reference %} <span class="muted">· {{ j.reference }}</span>{% endif %}
+      {% if (j.created or {}).get("via") %} <span class="badge info" title="Made by Claude for {{ j.created.get('by') }}">{{ m.icon("spark") }} Claude</span>{% endif %}</td>
+    <td class="nowrap">{{ m.kind_label(j.kind) }}</td>
+    <td>{{ m.status_badge(j) }}{% if j.reversed_by %} <span class="muted small">reversed by {{ j.reversed_by }}</span>{% endif %}</td>
+    <td class="num">{{ j.total_debit|money0 }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="empty">No {{ "bank transactions" if kind == "bank" else "journals" }}{% if status != "all" or q or kind %} match{% endif %}.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

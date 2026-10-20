@@ -1,15 +1,18 @@
 # Report pack structure
 
 Anatomy of the Fortis "Financial Reports" pack as issued from Xero report
-templates, captured from the five 2025/2026 packs. `render_pack.py` reproduces
-this page for page; `assets/boilerplate.json` holds the wording.
+templates. It was first captured from the five 2025/2026 company packs and then
+checked against the FY2026 company packs (IHDC, RSJ, JL Auto and others).
+`render_pack.py` reproduces it page for page; `assets/boilerplate.json` holds
+the wording. Trust, partnership and sole-trader packs use the same page
+anatomy with their own report set. See `references/entity-types.md`.
 
-## Page order (default)
+## Page order (company default)
 
 | # | Page | Notes |
 |---|---|---|
 | 1 | **Cover** | "Financial Reports" (blue, bold) · entity name · "ABN xx xxx xxx xxx" · "For the year ended 30 June 20XX" · "Prepared by Fortis Accounting Partners". No footer. |
-| 2 | **Contents** | One line per report, in print order. No footer. |
+| 2 | **Contents** | One line per report, in print order, with its start page in bold on the left (`options.contents_page_numbers`). Carries the footer. |
 | 3 | **Profit and Loss Statement** | Columns `2026 | 2025`. |
 | 4 | **Balance Sheet** | "As at 30 June 2026"; columns `NOTES | 30 JUNE 2026 | 30 JUNE 2025`. |
 | 5 | **Movements in Equity** | Columns `2026 | 2025`. (Frontier prints this *before* the Balance Sheet - `options.report_order`.) |
@@ -18,19 +21,26 @@ this page for page; `assets/boilerplate.json` holds the wording.
 | … | **Directors Declaration** | Signature block per director + Dated. |
 | last | **Compilation Report** | APES 315 wording, signed John Kalachian. |
 
-Every page from the P&L onwards carries the footer
+Every page from the Contents page onwards carries the footer
 `Financial Reports | <Entity>` (left) and `Page x of y` (right). Continuation
 pages repeat the report title in small type at the top left and the column
 header row of the table.
 
-Footnotes above the footer rule:
+Footnotes above the footer rule (`report-map.json › footnotes`):
 
-* Statements (P&L, BS, depreciation schedule): *"The accompanying notes form
-  part of these financial statements. These statements should be read in
-  conjunction with the attached compilation report."*
+* Balance Sheet, Trust Income Distribution, Partner / Beneficiary Accounts and
+  Depreciation Schedule: *"The accompanying notes form part of these financial
+  statements. These statements should be read in conjunction with the attached
+  compilation report."* Only the first sentence prints when the pack has no
+  Compilation Report.
 * Notes pages: *"These notes should be read in conjunction with the attached
-  compilation report."*
-* Movements in Equity, Declaration, Compilation Report: none.
+  compilation report."* This is dropped when there is no Compilation Report.
+* P&L / Income Statement, Rental Schedule, Movements in Equity, Declaration,
+  Compilation Report: none. This was checked against the FY2026 Xero packs.
+  The original company skill printed it on the P&L as well.
+
+While any mapping line still needs review, or the render was forced with
+`--allow-errors`, every page carries a pale diagonal **DRAFT** stamp.
 
 ## Typography (Xero report template look)
 
@@ -152,10 +162,13 @@ workpaper's `Accounting Depn` tab or the client's asset register.
 Ties checked: Σ depreciation = P&L depreciation/amortisation/write-off lines;
 Σ closing value = Property, Plant and Equipment note (current year).
 
-## Directors Declaration
+## Declaration (Directors / Trustee / Partner)
 
-Plural wording (2+ directors) or singular wording (1 director) from
-`boilerplate.json`. Paragraph 1 refers to "30 June 20XX" - **derived from
+Plural wording (2+ signatories) or singular wording (1) from
+`boilerplate.json › declaration.<type>`. Trusts use corporate-trustee or
+individual-trustee wording, and partnerships the Partner Declaration. Sole
+traders have no declaration unless it is added to the report order. The date
+beside the signatures is blank unless `entity.date_signed` is given. Paragraph 1 refers to "30 June 20XX" - **derived from
 `entity.fy_end`**, never typed. One `Director: ______` block per name in
 `entity.directors`, then `Dated: ______`. Signing happens later through FuseSign
 (the Frontier pack carries the FuseSign audit trail as extra pages).
@@ -167,7 +180,10 @@ Plural wording (2+ directors) or singular wording (1 director) from
 (APES 315, APES 110) → *Assurance Disclaimer* → signature block:
 John Kalachian / Fortis Accounting Partners / Chartered Accountants / Suite 9
 Level 12 101 Bathurst Street / SYDNEY NSW 2000 / Dated. Singular "director"
-wording for a sole director.
+wording for a sole director. Trusts: "The Responsibility of the Trustee";
+partnerships: "…of the Partners"; sole traders: "…of the Proprietor" (only when
+added). The report is addressed to `entity.legal_name` when given (a
+partnership's legal name can differ from its trading name).
 
 ## Errors in the source packs the generator must not repeat
 

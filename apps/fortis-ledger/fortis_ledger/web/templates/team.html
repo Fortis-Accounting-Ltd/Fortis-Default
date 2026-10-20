@@ -1,0 +1,170 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Team{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Team</h1><p class="muted">Share the client files with your colleagues, and choose who can open which client.</p></div>
+</div>
+
+<div class="cards two">
+  <div class="card">
+    <div class="feature"><span class="feature-icon">{{ m.icon("cloud") }}</span>
+      <div><h2>Shared client files</h2>
+        <p class="help">Everyone works in the same data folder. OneDrive keeps it up to date on each PC and SharePoint keeps a version
+          history. Fortis Ledger lets one person change a client at a time, and tells an open screen when a colleague has changed it.</p></div></div>
+    <p>{% if status.kind == "sharepoint" %}<span class="badge ok">{{ m.icon("check") }} In SharePoint: {{ status.library }}</span>
+       {% elif status.kind == "onedrive" %}<span class="badge review">In your own OneDrive</span>
+       {% else %}<span class="badge warning">Only on this PC</span>{% endif %}</p>
+    <p class="mono small">{{ settings.data_folder }}</p>
+    {% if status.kind == "sharepoint" %}
+    <p class="help">Colleagues open the <strong>{{ status.library }}</strong> library in SharePoint and click <strong>Sync</strong>, then
+      choose the synced folder when Fortis Ledger first opens.</p>
+    {% elif status.kind == "onedrive" %}
+    <p class="help">Colleagues only see it if you share this folder with them in OneDrive. A SharePoint library suits a team better -
+      everyone syncs it the same way. Move it there below.</p>
+    {% else %}
+    <p class="help">Colleagues can't see these clients. Move the data folder into a SharePoint library that OneDrive syncs to this PC.</p>
+    {% endif %}
+    {% if admin %}
+    <details{% if status.kind != "sharepoint" %} open{% endif %}>
+      <summary>Move the data folder into SharePoint</summary>
+      <ol class="steps small">
+        <li>In SharePoint, open the document library the firm keeps Fortis Ledger in (or make one, e.g. a library called <em>Fortis Ledger</em>)
+          and click <strong>Sync</strong>. OneDrive puts it on this PC{% if status.synced %}, in <code>{{ status.synced }}</code>{% endif %}.</li>
+        <li>Choose that folder here. Fortis Ledger copies every client into it, checks the copy, and switches to it. The old folder is left
+          as it was.</li>
+        <li>Ask colleagues to close Fortis Ledger first, then sync the library and choose it when they open Fortis Ledger again.</li>
+      </ol>
+      <form method="post" action="{{ url_for('ui.team_move') }}"
+            data-confirm="Copy the data folder into this folder and switch to it? Fortis Ledger should be closed on other PCs.">
+        {{ m.csrf() }}
+        <div class="input-row">
+          <input id="move-dest" name="dest" required aria-label="The SharePoint library's folder on this PC"
+                 placeholder="{% if status.synced %}{{ status.synced }}{% else %}C:\Users\you\Organisation{% endif %}\Fortis Ledger - Documents">
+          <button type="button" class="btn hidden" data-browse-folder="move-dest">Browse...</button>
+        </div>
+        <div class="actions"><button class="btn">{{ m.icon("cloud") }} Copy and switch</button></div>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="feature"><span class="feature-icon">{{ m.icon("mail") }}</span>
+      <div><h2>Invite a colleague</h2>
+        <p class="help">An email with the three steps: install Fortis Ledger, sync the library, open it. Attach the installer
+          (Fortis-Ledger-Setup-{{ VERSION }}.exe) to it.</p></div></div>
+    <textarea id="invite-text" rows="13" readonly aria-label="The invite">{{ invite.body }}</textarea>
+    <div class="actions">
+      {{ m.post_button(url_for('ui.team_invite'), "Write the email", "btn primary") }}
+      <button type="button" class="btn hidden" data-copy="invite-text" data-copied="Copied">{{ m.icon("copy") }} Copy the text</button>
+    </div>
+    {% if t.managed and t.join == "admin" %}<p class="help">New people need an admin to add them: add your colleague below too.</p>{% endif %}
+  </div>
+</div>
+
+<div class="panel" id="access">
+  <h2>Who can open what</h2>
+  {% if not t.managed %}
+  <p>Everyone who uses the data folder can open every client. Manage access to choose who may use these clients, and to limit a client
+    to the people who work on it.</p>
+  {% if not signin %}
+  <div class="flash warn">{{ m.icon("alert") }}<span>People are known by their office email, so office sign-in must be required first:
+    <a href="{{ url_for('ui.firm_settings') }}">Firm settings &gt; Sign in with office email</a>.</span></div>
+  {% elif not me %}
+  <div class="flash warn">{{ m.icon("alert") }}<span>Sign in with your office email first.</span></div>
+  {% elif admin %}
+  <form method="post" action="{{ url_for('ui.team_page') }}">
+    {{ m.csrf() }}<input type="hidden" name="op" value="on">
+    <div class="form-grid compact">
+      <label for="on-name">Your name</label><input id="on-name" name="name" value="{{ my_name }}">
+      <label for="on-join">New people</label>
+      <select id="on-join" name="join">{% for k, v in joins.items() %}<option value="{{ k }}">{{ v|capitalize }}</option>{% endfor %}</select>
+    </div>
+    <p class="help">You ({{ me }}) become the first admin. Admins can open every client, add people, limit clients, change firm settings
+      and share updates with everyone.</p>
+    <div class="actions"><button class="btn primary">{{ m.icon("team") }} Manage access</button></div>
+  </form>
+  {% endif %}
+  {% else %}
+  {% if not managing %}
+  <div class="flash warn">{{ m.icon("alert") }}<span>These rules are not applied while office sign-in is not required - make it required again in
+    <a href="{{ url_for('ui.firm_settings') }}">Firm settings</a>.</span></div>
+  {% endif %}
+  <table class="grid">
+    <thead><tr><th>Person</th><th>Role</th><th>Can open</th><th>Added</th>{% if admin %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for email, p in people %}
+    <tr>
+      <td><div class="name-cell"><span class="avatar">{{ m.initials(p.name or email) }}</span>
+        <div><strong>{{ p.name or email }}</strong>{% if email == me %} <span class="badge info">You</span>{% endif %}<div class="muted small">{{ email }}</div></div></div></td>
+      <td>{% if admin %}
+        <form method="post" action="{{ url_for('ui.team_page') }}" class="inline">
+          {{ m.csrf() }}<input type="hidden" name="op" value="person"><input type="hidden" name="email" value="{{ email }}">
+          <select name="role" data-autosubmit aria-label="Role of {{ p.name or email }}">
+            {% for k, v in roles.items() %}<option value="{{ k }}"{% if p.role == k %} selected{% endif %}>{{ v }}</option>{% endfor %}
+          </select>
+          <noscript><button class="btn small">Save</button></noscript>
+        </form>
+        {% else %}<span class="badge {{ {'admin': 'info', 'none': 'light'}.get(p.role, '') }}">{{ roles[p.role] }}</span>{% endif %}</td>
+      <td>{{ summary[email] }}</td>
+      <td class="small muted">{{ p.added_at|when }}{% if p.added_by %}<div>{{ t.name(p.added_by) }}</div>{% endif %}</td>
+      {% if admin %}<td class="right">{{ m.post_button(url_for('ui.team_page'), "Remove", "btn small link",
+            confirm="Remove " ~ (p.name or email) ~ " from the team?", fields={"op": "remove", "email": email}) }}</td>{% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% if admin %}
+  <form method="post" action="{{ url_for('ui.team_page') }}" class="form-row wrap mt">
+    {{ m.csrf() }}<input type="hidden" name="op" value="person">
+    <div class="field grow"><label for="add-email">Office email</label>
+      <input id="add-email" name="email" type="email" required placeholder="name@{{ domain or 'yourfirm.com.au' }}"></div>
+    <div class="field grow"><label for="add-name">Name</label><input id="add-name" name="name" placeholder="As it shows in the change log"></div>
+    <div class="field"><label for="add-role">Role</label>
+      <select id="add-role" name="role">{% for k, v in roles.items() %}<option value="{{ k }}"{% if k == "staff" %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    <button class="btn primary">{{ m.icon("plus") }} Add</button>
+  </form>
+  <form method="post" action="{{ url_for('ui.team_page') }}" class="inline">
+    {{ m.csrf() }}<input type="hidden" name="op" value="join">
+    <label for="join">New people who sign in</label>
+    <select id="join" name="join" data-autosubmit>{% for k, v in joins.items() %}<option value="{{ k }}"{% if t.join == k %} selected{% endif %}>{{ v|capitalize }}</option>{% endfor %}</select>
+    <noscript><button class="btn small">Save</button></noscript>
+  </form>
+  {% endif %}
+
+  <h3>Clients limited to named people</h3>
+  {% if limited %}
+  <ul>{% for r in limited %}
+    <li><a href="{{ url_for('ui.client_details', slug=r.c.slug) }}#access">{{ r.c.name }}</a>: {{ r.people|join(", ") or "nobody else" }}, and the admins</li>
+  {% endfor %}</ul>
+  {% else %}
+  <p class="muted">None - everyone in the team can open every client. To limit one, open it and go to Client details &gt; Access.</p>
+  {% endif %}
+  <p class="help">Fortis Ledger applies these rules on every PC, and to Claude. The files are still in the shared folder, so for a client
+    that must stay private also limit its folder (<code>clients\{name}</code>) in SharePoint to the same people.</p>
+
+  {% if admin %}
+  <details class="mt">
+    <summary>Stop managing access</summary>
+    <p class="help">Everyone who uses the data folder can then open every client. The team list and the limits are kept in case you
+      manage access again.</p>
+    {{ m.post_button(url_for('ui.team_page'), "Stop managing access", "btn danger",
+                     confirm="Stop managing access? Everyone who uses the data folder can then open every client.", fields={"op": "off"}) }}
+  </details>
+  {% endif %}
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Recent changes</h2>
+  {% if log %}
+  <table class="grid compact">
+    <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
+    <tbody>{% for r in log %}<tr><td class="nowrap">{{ r.at|when }}</td><td>{{ r.who }}</td><td>{{ r.text }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% else %}
+  <p class="muted">Changes to the team, updates shared with everyone, and moves of the data folder are listed here.</p>
+  {% endif %}
+</div>
+{% endblock %}

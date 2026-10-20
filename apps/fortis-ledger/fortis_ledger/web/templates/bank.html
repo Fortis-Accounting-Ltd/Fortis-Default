@@ -1,0 +1,53 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Bank{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Bank accounts</h1>
+    <p class="muted">Import the statements from internet banking, then code each line to an account - that posts it to the ledger.</p>
+  </div>
+</div>
+
+{% if banks %}
+{{ m.bank_cards(banks, readonly) }}
+{% else %}
+<div class="panel empty-state">
+  <span class="feature-icon">{{ m.icon("bank") }}</span>
+  <div><strong>No bank statements yet</strong>
+    <p class="muted">Import a statement below. Its lines wait here to be coded - like Xero's cash coding - and nothing reaches the ledger until you reconcile them.</p></div>
+</div>
+{% endif %}
+
+{% if not readonly %}
+<form method="post" action="{{ url_for('ui.bank_upload', slug=client.slug) }}" enctype="multipart/form-data" class="panel" id="import">
+  {{ m.csrf() }}
+  <h2>Import a statement</h2>
+  <div class="form-row wrap">
+    <div class="field grow">
+      <label for="stmt-account">Bank account</label>
+      <div class="input-row">
+        <select id="stmt-account" name="account" required data-account-select>
+          <option value="">Choose the account</option>
+          {% if bank_accounts %}<optgroup label="Bank accounts">
+            {% for a in bank_accounts %}<option value="{{ a.code }}"{% if picked == a.code %} selected{% endif %}>{{ a.code }} {{ a.name }}</option>{% endfor %}
+          </optgroup>{% endif %}
+          <optgroup label="Credit cards, loans and other balance sheet accounts">
+            {% for a in other_accounts %}<option value="{{ a.code }}"{% if picked == a.code %} selected{% endif %}>{{ a.code }} {{ a.name }}</option>{% endfor %}
+          </optgroup>
+        </select>
+        <button type="button" class="btn hidden" data-new-account data-type="Bank" data-target="stmt-account">{{ m.icon("plus") }} New bank account</button>
+      </div>
+    </div>
+    <div class="field grow">
+      <label for="stmt-file">Statement file</label>
+      <input id="stmt-file" type="file" name="file" accept=".csv,.txt,.xlsx,.xlsm" required>
+    </div>
+    <div class="field"><label>&nbsp;</label><button class="btn primary">Upload and check</button></div>
+  </div>
+  <p class="help">Use the CSV file your internet banking exports (CommBank, Westpac, NAB, ANZ, St.George, Macquarie, Bendigo and most
+    others), or an Excel file. The columns are found for you and shown before anything is saved. Lines already imported - from an
+    overlapping statement - are skipped, so the same dates can be imported again safely.</p>
+</form>
+{% include "_new_account.html" %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,18 @@
+{# Client details > Access: who may open this client (admins, when the firm manages access - see teamviews._access_globals) #}{% import "_macros.html" as m with context %}
+<form method="post" class="panel" id="access" action="{{ url_for('ui.team_access', client=client.slug) }}">
+  {{ m.csrf() }}
+  <h2>Access</h2>
+  <p class="help">Who can open {{ client.name }} in Fortis Ledger, and in Claude. Admins ({{ access.admins|join(", ") }}) can always open it.</p>
+  <label class="check"><input type="radio" name="mode" value="everyone"{% if not access.limited %} checked{% endif %}> Everyone in the team</label>
+  <label class="check"><input type="radio" name="mode" value="named"{% if access.limited %} checked{% endif %}> Only these people:</label>
+  <div class="access-people">
+    {% for p in access.staff %}
+    <label class="check"><input type="checkbox" name="people" value="{{ p.email }}"{% if p.checked %} checked{% endif %}> {{ p.name }}</label>
+    {% else %}
+    <p class="muted small">There are no staff in the team yet - add people on the <a href="{{ url_for('ui.team_page') }}">Team</a> page.</p>
+    {% endfor %}
+  </div>
+  <p class="help">For a client that must stay private, also limit its folder in SharePoint to the same people - anyone who syncs the data folder
+    has its files.</p>
+  <div class="actions"><button class="btn primary">Save access</button></div>
+</form>

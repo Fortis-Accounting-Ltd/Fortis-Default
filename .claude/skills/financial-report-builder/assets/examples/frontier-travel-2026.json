@@ -22,7 +22,9 @@
    "compilation"
   ],
   "depreciation_layout": "register",
-  "include_inventory_policy": false
+  "include_inventory_policy": false,
+  "ppe_note_lines": "accounts",
+  "notes_order": ["cash", "receivables", "inventory", "prepayments", "ppe", "financial_assets", "intangibles", "investments", "other_assets", "provisions", "payables", "financial_liabilities", "shareholder_loans", "beneficiary_entitlements", "other_liabilities", "reserves"]
  },
  "equity": {
   "opening_py": 962653

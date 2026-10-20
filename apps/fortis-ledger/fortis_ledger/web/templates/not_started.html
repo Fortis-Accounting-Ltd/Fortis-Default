@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}FY{{ fy }}{% endblock %}
+{% block content %}
+<div class="panel narrow">
+  <h1>FY{{ fy }} has not been started</h1>
+  {% if years %}
+  <p>{% if fy > years[-1] %}Roll FY{{ years[-1] }} forward at <a href="{{ url_for('ui.year_end', slug=client.slug, fy=years[-1]) }}">Year end</a> to open FY{{ fy }}.
+     {% else %}Add it on the <a href="{{ url_for('ui.overview', slug=client.slug) }}">Overview</a>.{% endif %}</p>
+  {% else %}
+  <p>Start the first year on the <a href="{{ url_for('ui.overview', slug=client.slug) }}">Overview</a>.</p>
+  {% endif %}
+</div>
+{% endblock %}

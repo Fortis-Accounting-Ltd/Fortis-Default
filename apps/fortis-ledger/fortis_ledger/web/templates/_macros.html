@@ -1,0 +1,93 @@
+{% macro csrf() -%}
+<input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+{%- endmacro %}
+
+{% macro fy_field() -%}
+<input type="hidden" name="fy" value="{{ fy }}">
+{%- endmacro %}
+
+{% macro icon(name, cls="ic") -%}
+<svg class="{{ cls }}" aria-hidden="true" focusable="false"><use href="#i-{{ name }}"></use></svg>
+{%- endmacro %}
+
+{% macro nav(key, href, label, icon_name, current) -%}
+<a href="{{ href }}" class="nav-item{% if current == key %} active{% endif %}"{% if current == key %} aria-current="page"{% endif %} title="{{ label }}">{{ icon(icon_name) }}<span>{{ label }}</span></a>
+{%- endmacro %}
+
+{% macro initials(name) -%}
+{{ (name or "?").replace("&", " ").replace(".", " ").split()[:2]|map("first")|join|upper }}
+{%- endmacro %}
+
+{% macro post_button(action, label, cls="btn", confirm=None, fields=None, disabled=False) -%}
+<form method="post" action="{{ action }}" class="inline-form"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
+  {{ csrf() }}
+  {% for k, v in (fields or {}).items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  <button type="submit" class="{{ cls }}"{% if disabled %} disabled{% endif %}>{{ label }}</button>
+</form>
+{%- endmacro %}
+
+{% macro account_datalist(accounts, id="dl-accounts") -%}
+<datalist id="{{ id }}">
+  {% for code, name, rc in accounts %}<option value="{{ code }}">{{ code }} {{ name }}</option>
+  {% endfor %}
+</datalist>
+{%- endmacro %}
+
+{% macro code_datalist(codes, id="dl-codes") -%}
+<datalist id="{{ id }}">
+  {% for rc, desc in codes %}<option value="{{ rc }}">{{ desc }}</option>
+  {% endfor %}
+</datalist>
+{%- endmacro %}
+
+{% macro status_badge(j) -%}
+<span class="badge {{ j.status }}">{{ j.status|capitalize }}</span>
+{%- endmacro %}
+
+{% macro kind_label(kind) -%}
+{{ {"manual": "Manual", "import": "Import", "opening": "Opening balances", "close": "Year-end close", "reversal": "Reversal", "bank": "Bank transaction"}.get(kind, kind) }}
+{%- endmacro %}
+
+{% macro pager(page, pages, endpoint) -%}
+{% if pages > 1 %}
+<nav class="pager" aria-label="Pages">
+  {% if page > 1 %}<a class="btn small" href="{{ url_for(endpoint, page=page - 1, **kwargs) }}">Previous</a>{% endif %}
+  <span class="muted small">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="btn small" href="{{ url_for(endpoint, page=page + 1, **kwargs) }}">Next</a>{% endif %}
+</nav>
+{% endif %}
+{%- endmacro %}
+
+{% macro bank_cards(banks, readonly) -%}
+<div class="cards bank-cards">
+  {% for s in banks %}
+  <div class="card bank-card">
+    <div class="bank-card-head">
+      <span class="feature-icon">{{ icon("bank") }}</span>
+      <div class="lc-text"><a href="{{ url_for('ui.bank_account', slug=client.slug, code=s.code) }}"><strong>{{ s.name }}</strong></a>
+        <small class="muted">{{ s.code }}{% if s.last_import %} · last statement {{ s.last_import.at|when }}{% endif %}</small></div>
+    </div>
+    {% if s.to_reconcile %}
+    <a class="btn primary" href="{{ url_for('ui.bank_account', slug=client.slug, code=s.code) }}">Reconcile {{ s.to_reconcile }} item{{ "s" if s.to_reconcile != 1 }}</a>
+    {% elif s.has_feed %}
+    <span class="badge ok">{{ icon("check") }} All reconciled</span>
+    {% elif not readonly %}
+    <a class="btn" href="{{ url_for('ui.bank', slug=client.slug, account=s.code) }}#import">Import a statement</a>
+    {% endif %}
+    <dl class="bank-figures">
+      {% if s.statement %}<dt>Statement balance</dt><dd>{{ s.statement[1]|money0 }} <span class="muted small">at {{ s.statement[0]|dmy }}</span></dd>{% endif %}
+      {% if s.ledger_balance is not none %}<dt>Balance in ledger</dt><dd>{{ s.ledger_balance|money0 }} <span class="muted small">at {{ s.as_at|dmy }}</span></dd>{% endif %}
+      {% if s.statement and s.ledger_balance is not none and s.statement[1] != s.ledger_balance %}
+      <dt>Difference</dt><dd class="warn-text">{{ (s.statement[1] - s.ledger_balance)|money0 }}</dd>{% endif %}
+    </dl>
+  </div>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro tax_select(name, value, choices, label="Tax rate", blank="Account default", cls="") -%}
+<select name="{{ name }}" aria-label="{{ label }}" class="tax {{ cls }}">
+  <option value="">{{ blank }}</option>
+  {% for t in choices %}<option{% if value == t %} selected{% endif %}>{{ t }}</option>{% endfor %}
+</select>
+{%- endmacro %}

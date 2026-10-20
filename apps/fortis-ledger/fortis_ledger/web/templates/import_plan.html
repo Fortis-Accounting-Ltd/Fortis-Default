@@ -1,0 +1,72 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Check import{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Check the import <span class="muted">FY{{ plan.fy }}</span></h1>
+    <p class="muted">{{ meta.file }} · {{ plan.lines|length }} line(s) ·
+      {% if plan.kind == "workpaper" %}workpaper{% elif plan.mode == "opening" %}opening balances at {{ L.fy_range(plan.fy)[0]|dmy }}{% else %}closing balances at {{ L.fy_range(plan.fy)[1]|dmy }}{% endif %}
+      {% if plan.info.get("sign_detected") %} · signs read as {{ "the natural side" if plan.info.sign_detected == "natural" else "debit positive" }}{% endif %}</p>
+  </div>
+  <div class="actions"><a class="btn link" href="{{ url_for('ui.import_start', slug=client.slug) }}">Start again</a></div>
+</div>
+
+{% if problems %}
+<div class="flash error" role="alert"><strong>Fix these first:</strong><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>
+{% endif %}
+{% for w in plan.warnings %}<div class="flash warn">{{ w }}</div>{% endfor %}
+
+<form method="post" class="panel wide" id="plan-form">
+  {{ m.csrf() }}{{ m.fy_field() }}
+  <p class="help">For each line: <strong>Post</strong> it to an existing account, make a <strong>New</strong> account (code, name and report code), or
+    <strong>Skip</strong> it. Lines marked <span class="badge review">Check</span> were matched on the name alone. The import sets each account to
+    the figure in the file - it posts only the difference from what the ledger already holds.</p>
+  <div class="table-scroll">
+  <table class="grid plan">
+    <thead><tr><th>Row</th><th>In the file</th><th class="num">Debit</th><th class="num">Credit</th>{% if has_py %}<th class="num">Prior year</th>{% endif %}
+      <th>Action</th><th>Account</th><th>New account name</th><th>Report code</th><th>Prints in / why</th></tr></thead>
+    <tbody>
+    {% for pl in plan.lines %}
+    {% set i = loop.index0 %}{% set v = pl.amount|float %}
+    <tr class="act-{{ pl.action }}{% if pl.review %} review{% endif %}" data-plan-row>
+      <td class="muted">{{ pl.line }}</td>
+      <td>{% if pl.source_code %}<span class="mono">{{ pl.source_code }}</span> {% endif %}{{ pl.source_name }}</td>
+      <td class="num">{{ v|money if v > 0 }}</td>
+      <td class="num">{{ (-v)|money if v < 0 }}</td>
+      {% if has_py %}<td class="num">{{ (pl.py|float)|money if pl.py is not none }}</td>{% endif %}
+      <td><select name="action_{{ i }}" data-plan-action aria-label="Action for row {{ pl.line }}">
+          {% for a, label in [("post", "Post"), ("new", "New"), ("skip", "Skip")] %}<option value="{{ a }}"{% if pl.action == a %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></td>
+      <td><input name="account_{{ i }}" value="{{ pl.account }}" list="dl-accounts" class="short mono" aria-label="Account for row {{ pl.line }}">
+        <span class="when-post muted small">{{ pl.account_name if pl.action == "post" }}</span></td>
+      <td><input name="name_{{ i }}" value="{{ pl.account_name if pl.action == 'new' else pl.source_name }}" class="when-new" aria-label="New account name for row {{ pl.line }}"></td>
+      <td><input name="rc_{{ i }}" value="{{ pl.report_code }}" list="dl-codes" class="when-new mono" aria-label="Report code for row {{ pl.line }}">
+        <span class="when-post mono small">{{ pl.report_code if pl.action == "post" }}</span></td>
+      <td class="small">{% if pl.review %}<span class="badge review">Check</span> {% endif %}{% if pl.action != "skip" %}{{ pl.prints_as }}{% endif %}
+        <div class="muted">{{ pl.reason }}</div></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr class="total"><td></td><td class="right">Total</td><td class="num">{{ totals.dr|money0 }}</td><td class="num">{{ totals.cr|money0 }}</td>
+        {% if has_py %}<td class="num">{{ totals.py_diff|money0 }}</td>{% endif %}<td colspan="5">{% if totals.diff %}<span class="err-text">Difference {{ totals.diff|money0 }}</span>{% else %}Balanced{% endif %}</td></tr>
+    </tfoot>
+  </table>
+  </div>
+  {{ m.account_datalist(accounts) }}
+  {{ m.code_datalist(codes) }}
+  <div class="options">
+    {% if has_py %}
+    <label class="check"><input type="checkbox" name="include_py" value="yes"{% if plan.include_py %} checked{% endif %}>
+      Also load the prior-year column into FY{{ plan.fy - 1 }} (for comparatives)</label>
+    {% endif %}
+    {% if totals.diff|abs > 1 %}
+    <label class="check"><input type="checkbox" name="allow_suspense" value="yes"> Post the difference of {{ totals.diff|money0 }} to a Suspense account and fix it later</label>
+    {% endif %}
+  </div>
+  <div class="actions">
+    <button class="btn primary" name="op" value="apply">Import</button>
+    <button class="btn" name="op" value="check">Check again</button>
+  </div>
+</form>
+{% endblock %}

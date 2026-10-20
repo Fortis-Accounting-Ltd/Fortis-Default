@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Check journals{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Check the journals</h1><p class="muted">{{ meta.file }} · {{ checks|length }} journal(s)</p></div>
+  <div class="actions"><a class="btn link" href="{{ url_for('ui.import_start', slug=client.slug) }}">Start again</a></div>
+</div>
+{% if parse_errors %}<div class="flash warn"><strong>Rows that were left out:</strong><ul>{% for e in parse_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+{% if not ok %}<div class="flash error">Some journals need fixing (marked below). Fix the file and upload it again, or save them all as drafts and fix them in the ledger.</div>{% endif %}
+{% for c in checks %}
+<div class="panel{% if c.errors %} has-error{% endif %}">
+  <h3>{{ c.j.date|dmy }} · {{ c.j.narration or c.j.reference }} <span class="muted">FY{{ c.fy }}</span></h3>
+  {% if c.errors %}<ul class="err-text">{% for e in c.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+  <table class="grid compact">
+    <thead><tr><th>Account</th><th>Description</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead>
+    <tbody>{% for ln in c.j.lines %}<tr><td>{{ ln.account }} {{ names.get(ln.account, "(not in the chart)") }}</td><td>{{ ln.description }}</td>
+      <td class="num">{{ ln.debit|money }}</td><td class="num">{{ ln.credit|money }}</td></tr>{% endfor %}</tbody>
+    <tfoot><tr class="total"><td></td><td class="right">Total</td><td class="num">{{ c.j.total_debit|money0 }}</td><td class="num">{{ c.j.total_credit|money0 }}</td></tr></tfoot>
+  </table>
+</div>
+{% endfor %}
+<form method="post" class="actions">
+  {{ m.csrf() }}{{ m.fy_field() }}
+  <button class="btn primary" name="op" value="post"{% if not ok %} disabled{% endif %}>Post all</button>
+  <button class="btn" name="op" value="draft">Save all as drafts</button>
+</form>
+{% endblock %}

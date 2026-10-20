@@ -1,0 +1,103 @@
+name: Fortis Ledger
+
+on:
+  push:
+    paths:
+      - "apps/fortis-ledger/**"
+      - ".github/workflows/fortis-ledger.yml"
+  pull_request:
+    paths:
+      - "apps/fortis-ledger/**"
+      - ".github/workflows/fortis-ledger.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: apps/fortis-ledger
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pyflakes fortis_ledger tests
+      - run: python -m pytest -q tests
+      - name: Check the Claude Desktop extension against the MCPB schema
+        if: runner.os == 'Linux'
+        run: |
+          python -m fortis_ledger --claude-extension "$RUNNER_TEMP/fortis-ledger.mcpb"
+          python -m zipfile -e "$RUNNER_TEMP/fortis-ledger.mcpb" "$RUNNER_TEMP/extension"
+          npx --yes @anthropic-ai/mcpb@2.1.2 validate "$RUNNER_TEMP/extension/manifest.json"
+
+  windows-app:
+    needs: test
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write       # GitHub signs the update files this job makes (see fortis_ledger/updates.py)
+    defaults:
+      run:
+        working-directory: apps/fortis-ledger
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements.txt pyinstaller
+      - run: pyinstaller --noconfirm --clean packaging/fortis-ledger.spec
+      - name: Make the update file, signed by GitHub for this build (and a test one for the installer check)
+        shell: pwsh
+        run: |
+          python packaging/make_update.py dist --require-signature
+          if ($LASTEXITCODE -ne 0) { throw "the update file was not made" }
+          $v = (Select-String -Path "fortis_ledger\__init__.py" -Pattern '^__version__ = "([^"]+)"').Matches[0].Groups[1].Value
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\test-update" | Out-Null
+          python packaging/make_update.py "$env:RUNNER_TEMP\test-update" --version "$v.1" --require-signature
+          if ($LASTEXITCODE -ne 0) { throw "the test update file was not made" }
+      - name: Self-test the built app
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist\Fortis Ledger\Fortis Ledger.exe" -ArgumentList "--self-test" -Wait -PassThru
+          Get-Content "$env:APPDATA\Fortis Ledger\self-test.txt"
+          if ($p.ExitCode -ne 0) { throw "self-test failed (exit $($p.ExitCode))" }
+      - name: Check the Claude connector program
+        run: python packaging/check_connector.py "dist/Fortis Ledger/fortis-ledger-mcp.exe"
+      - name: Check the Claude Desktop extension the way Claude Desktop runs it (Node.js)
+        run: python packaging/check_connector.py --extension "dist/Fortis Ledger/fortis-ledger-mcp.exe"
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+          ./packaging/build_installer.ps1
+      - name: Install it as staff would, self-test, update, upgrade and uninstall it
+        shell: pwsh
+        run: ./packaging/test_installer.ps1 (Get-Item "dist/Fortis-Ledger-Setup-*.exe").FullName (Get-Item "$env:RUNNER_TEMP/test-update/*.fortisupdate").FullName
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fortis-Ledger-Setup
+          path: apps/fortis-ledger/dist/Fortis-Ledger-Setup-*.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fortis-Ledger-Update
+          path: apps/fortis-ledger/dist/Fortis-Ledger-Update-*.fortisupdate
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fortis-Ledger-windows
+          path: apps/fortis-ledger/dist/Fortis Ledger
+          retention-days: 30

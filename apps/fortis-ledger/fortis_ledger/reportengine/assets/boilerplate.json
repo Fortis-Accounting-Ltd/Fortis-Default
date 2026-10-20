@@ -1,0 +1,268 @@
+{
+  "_comment": "Standard wording for the Fortis Financial Reports pack, by entity type, captured from the firm's Xero packs in FYI (company: 14 packs FY2026; trust: 33; partnership: 4; sole trader: 1 Xero + 1 legacy). Placeholders: {entity} (cover name), {legal_name} (compilation name), {fy_long} (30 June 2026), {trustee_ref}, plus the compilation words below. Deliberate corrections of slips in the Xero templates are listed in references/entity-types.md section 6; edit this file to change any wording (a pack can override with boilerplate_overrides).",
+  "firm": {
+    "name": "Fortis Accounting Partners",
+    "descriptor": "Chartered Accountants",
+    "address_lines": [
+      "Suite 9 Level 12 101 Bathurst Street",
+      "SYDNEY NSW 2000"
+    ],
+    "signatory": "John Kalachian",
+    "prepared_by": "Prepared by Fortis Accounting Partners",
+    "pack_title": "Financial Reports",
+    "footer_left": "Financial Reports"
+  },
+  "report_titles": {
+    "pnl": "Profit and Loss Statement",
+    "bs": "Balance Sheet",
+    "equity": "Movements in Equity",
+    "notes": "Notes to the Financial Statements",
+    "depreciation": "Depreciation Schedule",
+    "depreciation_simple": "Accounting Depreciation Schedule",
+    "declaration": "Directors Declaration",
+    "compilation": "Compilation Report",
+    "contents": "Contents",
+    "rental": "Rental Schedule",
+    "persons": "Partner Accounts",
+    "distribution": "Trust Income Distribution"
+  },
+  "default_report_order": [
+    "pnl",
+    "bs",
+    "equity",
+    "notes",
+    "depreciation",
+    "declaration",
+    "compilation"
+  ],
+  "policies": {
+    "heading": "1. Statement of Significant Accounting Policies",
+    "basis": [
+      "a. This financial report is a special purpose financial report prepared for use by directors and members of the company. The directors have determined that the company is not a reporting entity. The financial report has been prepared in accordance with the requirements of the following Australian Accounting Standards (including Australian Accounting Interpretations) of the Australian Accounting Standards Board and the <i>Corporations Act 2001</i>:",
+      "AASB 1031: Materiality",
+      "AASB 110: Events after the Balance Sheet Date",
+      "The financial report is prepared on an accruals basis and is based on historic costs and does not take into account changing money values or, except where specifically stated, current valuations of non-current assets.",
+      "The following specific accounting policies, which are consistent with the previous period unless otherwise stated, have been adopted in the preparation of this report:"
+    ],
+    "ppe": {
+      "heading": "b. Property, Plant and Equipment",
+      "text": "Property, plant and equipment are carried at cost, independent or directors' valuation. All assets, excluding freehold land and buildings, are depreciated over their useful lives to the company.",
+      "text_by_type": {
+        "trust": "Property, plant and equipment are carried at cost, independent or trustees' valuation. All assets, excluding freehold land and buildings, are depreciated over their useful lives to the trust.",
+        "partnership": "Property, plant and equipment are carried at cost, independent or partners' valuation. All assets, excluding freehold land and buildings, are depreciated over their useful lives to the partnership.",
+        "sole_trader": "Property, plant and equipment are carried at cost, independent or proprietor's valuation. All assets, excluding freehold land and buildings, are depreciated over their useful lives to the business."
+      }
+    },
+    "inventories": {
+      "heading": "c. Inventories",
+      "text": "Inventories are measured at the lower of cost and net realisable value. Costs are assigned on a first-in first-out basis and include direct materials, direct labour and an appropriate proportion of variable and fixed overhead expenses."
+    },
+    "optional": {
+      "_comment": "Extra policies the preparer may switch on via options.extra_policies (list of keys). Lettering continues automatically.",
+      "income_tax": {
+        "heading": "Income Tax",
+        "text": "The income tax expense for the year comprises current income tax expense. Current income tax expense charged to the profit or loss is the tax payable on taxable income, calculated using applicable income tax rates enacted at the reporting date. Deferred tax is not brought to account."
+      },
+      "revenue": {
+        "heading": "Revenue",
+        "text": "Revenue from the sale of goods is recognised upon the delivery of goods to customers. Revenue from the rendering of a service is recognised upon the delivery of the service to the customer. Interest revenue is recognised on a proportional basis taking into account the interest rates applicable to the financial assets. All revenue is stated net of the amount of goods and services tax (GST)."
+      },
+      "gst": {
+        "heading": "Goods and Services Tax (GST)",
+        "text": "Revenues, expenses and assets are recognised net of the amount of GST, except where the amount of GST incurred is not recoverable from the Australian Taxation Office. Receivables and payables in the balance sheet are shown inclusive of GST."
+      },
+      "employee_benefits": {
+        "heading": "Employee Benefits",
+        "text": "Provision is made for the company's liability for employee benefits arising from services rendered by employees to the end of the reporting period. Employee benefits that are expected to be settled within one year have been measured at the amounts expected to be paid when the liability is settled."
+      },
+      "foreign_currency": {
+        "heading": "Foreign Currency Transactions and Balances",
+        "text": "Foreign currency transactions are translated into functional currency using the exchange rates prevailing at the date of the transaction. Foreign currency monetary items are translated at the year-end exchange rate. Exchange differences arising on the translation of monetary items are recognised in the profit or loss."
+      }
+    },
+    "basis_by_type": {
+      "trust": [
+        "a. This financial report is a special purpose financial report prepared in order to satisfy the requirements of the trust deed to prepare a financial report. The trustees have determined that the trust is not a reporting entity. The financial report has been prepared in accordance with the requirements of the following Australian Accounting Standards (including Australian Accounting Interpretations) of the Australian Accounting Standards Board and the <i>Corporations Act 2001</i>:",
+        "AASB 1031: Materiality",
+        "AASB 110: Events after the Balance Sheet Date",
+        "The financial report is prepared on an accruals basis and is based on historic costs and does not take into account changing money values or, except where specifically stated, current valuations of non-current assets.",
+        "The following specific accounting policies, which are consistent with the previous period unless otherwise stated, have been adopted in the preparation of this report:"
+      ],
+      "partnership": [
+        "a. This financial report is a special purpose financial report prepared for use by the partners of the partnership. The partners have determined that the partnership is not a reporting entity. The financial report has been prepared in accordance with the requirements of the following Australian Accounting Standards (including Australian Accounting Interpretations) of the Australian Accounting Standards Board:",
+        "AASB 1031: Materiality",
+        "AASB 110: Events after the Balance Sheet Date",
+        "The financial report is prepared on an accruals basis and is based on historic costs and does not take into account changing money values or, except where specifically stated, current valuations of non-current assets.",
+        "The following specific accounting policies, which are consistent with the previous period unless otherwise stated, have been adopted in the preparation of this report:"
+      ],
+      "sole_trader": [
+        "a. This financial report is a special purpose financial report prepared for use by the proprietor of {entity}. The proprietor has determined that the business is not a reporting entity. The financial report has been prepared in accordance with the requirements of the following Australian Accounting Standards (including Australian Accounting Interpretations) of the Australian Accounting Standards Board:",
+        "AASB 1031: Materiality",
+        "AASB 110: Events after the Balance Sheet Date",
+        "The financial report is prepared on an accruals basis and is based on historic costs and does not take into account changing money values or, except where specifically stated, current valuations of non-current assets.",
+        "The following specific accounting policies, which are consistent with the previous period unless otherwise stated, have been adopted in the preparation of this report:"
+      ]
+    }
+  },
+  "fx_note": "Exchange rates used to convert foreign currency into AUD are shown below. Rates are provided by XE.com unless otherwise stated.",
+  "declaration": {
+    "company": {
+      "plural": {
+        "p1": "The directors have determined that the company is not a reporting entity and that this special purpose financial report should be prepared in accordance with the accounting policies outlined in Note 1 to the financial statements.",
+        "p2": "The directors of the company declare that:",
+        "items": [
+          "The financial statements and notes, present fairly the company's financial position as at {fy_long} and its performance for the year ended on that date in accordance with the accounting policies described in Note 1 to the financial statements; and",
+          "In the directors' opinion, there are reasonable grounds to believe that the company will be able to pay its debts as and when they become due and payable."
+        ],
+        "p3": "This declaration is made in accordance with a resolution of the Board of Directors.",
+        "signature_label": "Director:",
+        "dated_label": "Dated:"
+      },
+      "singular": {
+        "p1": "The director has determined that the company is not a reporting entity and that this special purpose financial report should be prepared in accordance with the accounting policies outlined in Note 1 to the financial statements.",
+        "p2": "The director of the company declares that:",
+        "items": [
+          "The financial statements and notes, present fairly the company's financial position as at {fy_long} and its performance for the year ended on that date in accordance with the accounting policies described in Note 1 to the financial statements; and",
+          "In the director's opinion, there are reasonable grounds to believe that the company will be able to pay its debts as and when they become due and payable."
+        ],
+        "p3": "This declaration is made in accordance with a resolution of the director.",
+        "signature_label": "Director:",
+        "dated_label": "Dated:"
+      }
+    },
+    "trust": {
+      "_comment": "corporate = the trustee is a company (signed by its directors; standard text in 28 of 31 Xero trust packs). individual = individual trustee(s): the firm has no consistent wording - this follows G & L Stalley FT with the plural cleaned up (references/entity-types.md).",
+      "corporate": {
+        "plural": {
+          "title": "Trustee Declaration",
+          "p1": "The directors of {trustee_ref} declare that {entity} is not a reporting entity and that this special purpose financial report should be prepared in accordance with the accounting policies outlined in Note 1 of the financial statements.",
+          "p2": "In accordance with a resolution of the Board of Directors, the directors of {trustee_ref} declare that:",
+          "items": [
+            "The financial statements and notes present fairly {entity}'s financial position as at {fy_long} and its performance for the year ended on that date in accordance with the accounting policies described in Note 1 of the financial statements.",
+            "In the directors' opinion there are reasonable grounds to believe that {entity} will be able to pay its debts as and when they become due and payable."
+          ],
+          "signature_label": "Director:",
+          "dated_label": "Date:"
+        },
+        "singular": {
+          "title": "Trustee Declaration",
+          "p1": "The director of {trustee_ref} declares that {entity} is not a reporting entity and that this special purpose financial report should be prepared in accordance with the accounting policies outlined in Note 1 of the financial statements.",
+          "p2": "In accordance with a resolution of the director, the director of {trustee_ref} declares that:",
+          "items": [
+            "The financial statements and notes present fairly {entity}'s financial position as at {fy_long} and its performance for the year ended on that date in accordance with the accounting policies described in Note 1 of the financial statements.",
+            "In the director's opinion there are reasonable grounds to believe that {entity} will be able to pay its debts as and when they become due and payable."
+          ],
+          "signature_label": "Director:",
+          "dated_label": "Date:"
+        }
+      },
+      "individual": {
+        "plural": {
+          "title": "Trustee Declaration",
+          "p1": "The trustees declare that {entity} is not a reporting entity and that this special purpose financial report should be prepared in accordance with the accounting policies outlined in Note 1 of the financial statements.",
+          "p2": "In accordance with a resolution of the trustees, the trustees declare that:",
+          "items": [
+            "The financial statements and notes present fairly {entity}'s financial position as at {fy_long} and its performance for the year ended on that date in accordance with the accounting policies described in Note 1 of the financial statements.",
+            "In the trustees' opinion there are reasonable grounds to believe that {entity} will be able to pay its debts as and when they become due and payable."
+          ],
+          "signature_label": "Trustee:",
+          "dated_label": "Date:"
+        },
+        "singular": {
+          "title": "Trustee Declaration",
+          "p1": "The trustee declares that {entity} is not a reporting entity and that this special purpose financial report should be prepared in accordance with the accounting policies outlined in Note 1 of the financial statements.",
+          "p2": "In accordance with a resolution of the trustee, the trustee declares that:",
+          "items": [
+            "The financial statements and notes present fairly {entity}'s financial position as at {fy_long} and its performance for the year ended on that date in accordance with the accounting policies described in Note 1 of the financial statements.",
+            "In the trustee's opinion there are reasonable grounds to believe that {entity} will be able to pay its debts as and when they become due and payable."
+          ],
+          "signature_label": "Trustee:",
+          "dated_label": "Date:"
+        }
+      }
+    },
+    "partnership": {
+      "plural": {
+        "title": "Partner Declaration",
+        "p1": "The partners declare that the partnership is not a reporting entity and that these special purpose financial statements should be prepared in accordance with the accounting policies outlined in Note 1 to the financial statements.",
+        "p2": "The partners of the partnership declare that:",
+        "items": [
+          "The financial statements and notes, present fairly the partnership’s financial position as at {fy_long} and its performance for the year ended on that date in accordance with the accounting policies described in Note 1 to the financial statements; and",
+          "In the partners’ opinion there are reasonable grounds to believe that the partnership will be able to pay its debts as and when they become due and payable."
+        ],
+        "signature_label": "Partner:",
+        "dated_label": "Dated:"
+      }
+    },
+    "sole_trader": {
+      "_comment": "Only printed when 'declaration' is added to the report order - the firm's Xero sole-trader pack has no declaration ('no signature is required'). Wording modernised from the legacy proprietor pack (Chiro for Kids 2017).",
+      "singular": {
+        "title": "Proprietor Declaration",
+        "p1": "The proprietor has determined that the business is not a reporting entity and that this special purpose financial report should be prepared in accordance with the accounting policies outlined in Note 1 to the financial statements.",
+        "p2": "The proprietor declares that:",
+        "items": [
+          "The financial statements and notes present fairly the financial position of {entity} as at {fy_long} and its performance for the year ended on that date in accordance with the accounting policies described in Note 1 to the financial statements; and",
+          "In the proprietor's opinion, there are reasonable grounds to believe that the business will be able to pay its debts as and when they become due and payable."
+        ],
+        "signature_label": "Proprietor:",
+        "dated_label": "Dated:"
+      }
+    }
+  },
+  "compilation": {
+    "title_line": "Compilation report to {entity}",
+    "p1": "We have compiled the accompanying special purpose financial statements of {entity}, which comprise the balance sheet as at {fy_long}, the statement of profit or loss for the year then ended, a summary of significant accounting policies and other explanatory notes. The specific purpose for which the special purpose financial statements have been prepared is set out in Note 1.",
+    "responsibility_heading": "The Responsibility of the {responsible_title}",
+    "p2": "{responsible_subject} solely responsible for the information contained in the special purpose financial statements, the reliability, accuracy and completeness of the information and for the determination that the basis of accounting used is appropriate to meet their needs and for the purpose that financial statements were prepared.",
+    "our_heading": "Our Responsibility",
+    "p3": "On the basis of information provided by the {responsible_word} we have compiled the accompanying special purpose financial statements in accordance with the basis of accounting as described in Note 1 to the financial statements and APES 315 <i>Compilation of Financial Information</i>.",
+    "p4": "We have applied our expertise in accounting and financial reporting to compile these financial statements in accordance with the basis of accounting described in Note 1 to the financial statements. We have complied with the relevant ethical requirements of APES 110 <i>Code of Ethics for Professional Accountants</i>.",
+    "disclaimer_heading": "Assurance Disclaimer",
+    "p5": "Since a compilation engagement is not an assurance engagement, we are not required to verify the reliability, accuracy or completeness of the information provided to us by management to compile these financial statements. Accordingly, we do not express an audit opinion or a review conclusion on these financial statements.",
+    "p6": "The special purpose financial statements were compiled exclusively for the benefit of the {responsible_word} who {who_are} responsible for the reliability, accuracy and completeness of the information used to compile them. We do not accept responsibility for the contents of the special purpose financial statements.",
+    "dated_label": "Dated:",
+    "words": {
+      "_comment": "Per entity type (and director count for companies): responsible_title / responsible_subject / responsible_word / who_are. {entity} inside responsible_subject is the compilation (legal) name.",
+      "company_plural": {
+        "responsible_title": "Directors",
+        "responsible_subject": "The directors of {entity} are",
+        "responsible_word": "directors",
+        "who_are": "are"
+      },
+      "company_singular": {
+        "responsible_title": "Director",
+        "responsible_subject": "The director of {entity} is",
+        "responsible_word": "director",
+        "who_are": "is"
+      },
+      "trust": {
+        "responsible_title": "Trustee",
+        "responsible_subject": "The Trustee is",
+        "responsible_word": "trustee",
+        "who_are": "is"
+      },
+      "partnership": {
+        "responsible_title": "Partners",
+        "responsible_subject": "The partners of {entity} are",
+        "responsible_word": "partners",
+        "who_are": "are"
+      },
+      "sole_trader": {
+        "responsible_title": "Proprietor",
+        "responsible_subject": "The proprietor of {entity} is",
+        "responsible_word": "proprietor",
+        "who_are": "is"
+      }
+    }
+  },
+  "report_titles_by_type": {
+    "trust": {
+      "pnl": "Income Statement",
+      "persons": "Beneficiary Accounts"
+    },
+    "partnership": {
+      "persons": "Partner Accounts"
+    },
+    "sole_trader": {}
+  }
+}

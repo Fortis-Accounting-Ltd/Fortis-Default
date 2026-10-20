@@ -1,0 +1,61 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Chart of accounts{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Chart of accounts</h1>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('ui.accounts_export', slug=client.slug) }}">Export (Xero CSV)</a>
+    {% if not readonly %}<a class="btn" href="{{ url_for('ui.import_start', slug=client.slug) }}#chart">Import a chart</a>{% endif %}
+  </div>
+</div>
+<p class="help">Each account's <strong>report code</strong> (Xero's codes, e.g. <code>LIA.CUR.PAY.TRA</code>) decides where it prints in the
+  Financial Reports and which note it is grouped into. Change it here and every year's reports follow.</p>
+
+{% if not readonly %}
+<details class="panel"{% if form %} open{% endif %}>
+  <summary>Add an account</summary>
+  <form method="post" action="{{ url_for('ui.account_add', slug=client.slug) }}" class="form-row wrap">
+    {{ m.csrf() }}{{ m.fy_field() }}
+    <div class="field"><label for="code">Code</label><input id="code" name="code" value="{{ form.get('code', '') }}" required class="short"></div>
+    <div class="field grow"><label for="name">Name</label><input id="name" name="name" value="{{ form.get('name', '') }}" required></div>
+    <div class="field grow"><label for="report_code">Report code</label>
+      <input id="report_code" name="report_code" value="{{ form.get('report_code', '') }}" list="dl-codes" required class="mono" placeholder="e.g. EXP.ADM"></div>
+    <div class="field"><label for="type">Account type</label>
+      <select id="type" name="type"><option value="">From the report code</option>
+        {% for t in types %}<option{% if form.get('type') == t %} selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+    <div class="field grow"><label for="reporting_name">Name in reports</label>
+      <input id="reporting_name" name="reporting_name" value="{{ form.get('reporting_name', '') }}" placeholder="Optional"></div>
+    <div class="field"><label>&nbsp;</label><button class="btn primary">Add</button></div>
+  </form>
+  {{ m.code_datalist(codes) }}
+</details>
+{% endif %}
+
+<div class="toolbar">
+  <div class="segmented">
+    {% for s, label in [("all", "All accounts"), ("used", "Used"), ("balances", "With a balance in FY" ~ fy)] %}
+    <a href="{{ url_for('ui.accounts', slug=client.slug, fy=fy, show=s) }}"{% if show == s %} class="active"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </div>
+  <input type="search" data-filter="accounts-table" placeholder="Filter by code, name or report code" aria-label="Filter accounts">
+</div>
+<table class="grid" id="accounts-table">
+  <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Report code</th><th>Prints in</th><th class="num">Balance FY{{ fy }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr id="a-{{ r.a.code }}"{% if r.a.system %} class="muted"{% endif %}>
+    <td class="nowrap"><a href="{{ url_for('ui.account_edit', slug=client.slug, code=r.a.code) }}">{{ r.a.code }}</a></td>
+    <td>{{ r.a.name }}{% if r.a.reporting_name %} <span class="muted small">prints as "{{ r.a.reporting_name }}"</span>{% endif %}
+      {% if r.a.system %}<span class="badge light">Xero system</span>{% endif %}</td>
+    <td class="nowrap">{{ r.a.type }}</td>
+    <td class="mono nowrap">{{ r.a.report_code }}</td>
+    <td class="small">{{ r.prints_as }}</td>
+    <td class="num">{% if r.balance %}<a href="{{ url_for('ui.account_transactions', slug=client.slug, fy=fy, code=r.a.code) }}">{{ r.balance|money }}</a>{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="empty">No accounts.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="help">Balances are debit positive; credits show in brackets.</p>
+{% endblock %}

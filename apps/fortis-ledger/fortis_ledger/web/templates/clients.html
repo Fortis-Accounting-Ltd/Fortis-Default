@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Clients{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Clients</h1>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('ui.xero_home') }}">{{ m.icon("link") }} Connect to Xero</a>
+    <a class="btn" href="{{ url_for('ui.migrate') }}">Move from Xero files</a>
+    <a class="btn primary" href="{{ url_for('ui.client_new') }}">{{ m.icon("plus") }} New client</a>
+  </div>
+</div>
+<form method="get" class="toolbar">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search by name or ABN" aria-label="Search clients">
+  <button class="btn">Search</button>
+  {% if q %}<a class="btn link" href="{{ url_for('ui.clients') }}">Clear</a>{% endif %}
+</form>
+{% if recent and not q %}
+<h2>Recent</h2>
+<div class="cards">
+  {% for r in recent %}
+  <a class="card link-card" href="{{ url_for('ui.overview', slug=r.c.slug) }}">
+    <span class="avatar lg">{{ m.initials(r.c.name) }}</span>
+    <span class="lc-text"><strong>{{ r.c.name }}</strong>
+      <span class="muted small">{{ r.c.type|entity }}{% if r.years %} · FY{{ r.years[-1] }}{% endif %}</span>
+      {% if r.lock %}<span class="badge locked">{{ r.lock.user }} is editing</span>{% endif %}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+<h2>All clients <span class="muted">({{ rows|length }})</span></h2>
+<table class="grid">
+  <thead><tr><th>Client</th><th>Type</th><th>ABN</th><th>Years</th><th>Last change</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td><div class="name-cell"><span class="avatar">{{ m.initials(r.c.name) }}</span><div><a href="{{ url_for('ui.overview', slug=r.c.slug) }}"><strong>{{ r.c.name }}</strong></a>
+      {% if r.c.legal_name and r.c.legal_name != r.c.name %}<div class="muted small">{{ r.c.legal_name }}</div>{% endif %}</div></div></td>
+    <td>{{ r.c.type|entity }}</td>
+    <td class="nowrap">{{ r.c.abn }}</td>
+    <td class="nowrap">{% if r.years %}FY{{ r.years[0] }}{% if r.years|length > 1 %} – FY{{ r.years[-1] }}{% endif %}{% else %}<span class="muted">none yet</span>{% endif %}</td>
+    <td class="nowrap">{% if r.last %}{{ r.last.at|when }} · {{ r.last.user }}{% endif %}</td>
+    <td>{% if r.lock %}<span class="badge locked">{{ r.lock.user }} is editing</span>{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="empty">{% if q %}No client matches "{{ q }}".{% else %}No clients yet - set one up, or move one across from Xero.{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

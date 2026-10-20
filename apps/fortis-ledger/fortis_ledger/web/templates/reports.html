@@ -1,0 +1,145 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Reports <span class="muted">FY{{ fy }}</span></h1></div>
+{% if not started %}
+<div class="panel">FY{{ fy }} has not been started.</div>
+{% else %}
+
+{% if result %}
+<div class="panel{% if result.has_errors %} has-error{% endif %}">
+  <h2>{{ result.file }}</h2>
+  {% if result.has_errors %}<p class="err-text">The pack has errors, so it is stamped DRAFT. Fix them (usually a report code) and generate it again.</p>
+  {% elif result.draft %}<p>Stamped DRAFT. Tick <em>Final</em> when the figures are signed off.</p>{% endif %}
+  <div class="stats">
+    <div class="stat"><span>Net profit FY{{ fy }}</span><strong>{{ result.summary.npat.cy|money0 }}</strong></div>
+    <div class="stat"><span>Prior year</span><strong>{{ result.summary.npat.py|money0 }}</strong></div>
+    <div class="stat"><span>Net assets</span><strong>{{ result.summary.net_assets.cy|money0 }}</strong></div>
+    <div class="stat"><span>Prior year</span><strong>{{ result.summary.net_assets.py|money0 }}</strong></div>
+  </div>
+  {% set checks = result.validation|rejectattr("level", "equalto", "info")|list %}
+  {% if checks %}
+  <h3>Checks</h3>
+  <ul class="checks">{% for v in checks %}<li class="{{ v.level }}"><span class="badge {{ v.level }}">{{ v.level|capitalize }}</span> {{ v.detail }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% set notes = result.validation|selectattr("level", "equalto", "info")|list %}
+  {% if notes %}<details><summary>{{ notes|length }} note(s)</summary><ul class="checks">{% for v in notes %}<li>{{ v.detail }}</li>{% endfor %}</ul></details>{% endif %}
+</div>
+{% endif %}
+
+{% if not readonly %}
+<div class="cards two">
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="card">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="financial_reports">
+    <h2>Financial Reports</h2>
+    <p class="help">The firm's Xero report template: Contents, Profit and Loss, Balance Sheet, Notes, Movements in Equity (and the statements
+      for trusts and partnerships), Declaration and Compilation Report - with last year's figures from the ledger.</p>
+    <div class="form-grid compact">
+      <label for="fr-upto">Period ends</label><input id="fr-upto" name="upto" value="{{ fy_end|dmy }}" class="date">
+      <label for="fr-signed">Date signed</label><input id="fr-signed" name="date_signed" placeholder="e.g. 15 October 2026">
+    </div>
+    <label class="check"><input type="checkbox" name="final" value="yes"> Final (no DRAFT stamp)</label>
+    <label class="check"><input type="checkbox" name="open" value="yes"{% if desktop %} checked{% endif %}> Open it when it is ready</label>
+    <button class="btn primary">Generate PDF</button>
+  </form>
+
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="card">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="trial_balance">
+    <h2>Trial Balance</h2>
+    <div class="form-grid compact"><label for="tb-upto">As at</label><input id="tb-upto" name="upto" value="{{ fy_end|dmy }}" class="date"></div>
+    <label class="check"><input type="checkbox" name="open" value="yes"{% if desktop %} checked{% endif %}> Open it when it is ready</label>
+    <div class="actions"><button class="btn" name="format" value="pdf">PDF</button><button class="btn" name="format" value="xlsx">Excel</button></div>
+  </form>
+
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="card">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="profit_and_loss">
+    <h2>Profit and Loss</h2>
+    <p class="help">Income and expenses by section - Trading Income, Cost of Sales, Other Income, Operating Expenses - to Net Profit.</p>
+    <div class="form-grid compact">
+      <label for="pl-start">From</label><input id="pl-start" name="start" value="{{ fy_start|dmy }}" class="date">
+      <label for="pl-end">To</label><input id="pl-end" name="end" value="{{ fy_end|dmy }}" class="date">
+    </div>
+    <label class="check"><input type="checkbox" name="compare" value="yes" checked> Compare with the year before</label>
+    <input type="hidden" name="compare" value="no">
+    <label class="check"><input type="checkbox" name="open" value="yes"{% if desktop %} checked{% endif %}> Open it when it is ready</label>
+    <div class="actions"><button class="btn" name="format" value="pdf">PDF</button><button class="btn" name="format" value="xlsx">Excel</button>
+      <a class="btn link" href="{{ url_for('ui.profit_and_loss', slug=client.slug, fy=fy) }}">View on screen</a></div>
+  </form>
+
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="card">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="balance_sheet">
+    <h2>Balance Sheet</h2>
+    <p class="help">Assets, liabilities and equity - with this year's earnings - as at any date.</p>
+    <div class="form-grid compact"><label for="bs-as-at">As at</label><input id="bs-as-at" name="as_at" value="{{ fy_end|dmy }}" class="date"></div>
+    <label class="check"><input type="checkbox" name="compare" value="yes" checked> Compare with a year earlier</label>
+    <input type="hidden" name="compare" value="no">
+    <label class="check"><input type="checkbox" name="open" value="yes"{% if desktop %} checked{% endif %}> Open it when it is ready</label>
+    <div class="actions"><button class="btn" name="format" value="pdf">PDF</button><button class="btn" name="format" value="xlsx">Excel</button>
+      <a class="btn link" href="{{ url_for('ui.balance_sheet', slug=client.slug, fy=fy) }}">View on screen</a></div>
+  </form>
+
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="card">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="gst_report">
+    <h2>GST Report</h2>
+    <p class="help">GST by tax rate with the BAS labels (G1, G3, G10, G11, 1A, 1B) and every transaction behind them. Cash basis counts
+      money received and paid; accrual basis also counts journals with a tax rate.</p>
+    <div class="form-grid compact">
+      <label for="gst-start">From</label><input id="gst-start" name="start" value="{{ fy_start|dmy }}" class="date">
+      <label for="gst-end">To</label><input id="gst-end" name="end" value="{{ fy_end|dmy }}" class="date">
+      <label for="gst-basis">Basis</label>
+      <select id="gst-basis" name="basis"><option value="accrual">Accrual</option><option value="cash">Cash</option></select>
+    </div>
+    <label class="check"><input type="checkbox" name="open" value="yes"{% if desktop %} checked{% endif %}> Open it when it is ready</label>
+    <div class="actions"><button class="btn" name="format" value="pdf">PDF</button><button class="btn" name="format" value="xlsx">Excel</button>
+      <a class="btn link" href="{{ url_for('ui.gst_page', slug=client.slug, fy=fy) }}">View on screen</a></div>
+  </form>
+
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="card">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="general_ledger">
+    <h2>General Ledger Detail</h2>
+    <p class="help">Every transaction in each account, with opening and closing balances.</p>
+    <div class="form-grid compact">
+      <label for="gl-start">From</label><input id="gl-start" name="start" value="{{ fy_start|dmy }}" class="date">
+      <label for="gl-end">To</label><input id="gl-end" name="end" value="{{ fy_end|dmy }}" class="date">
+      <label for="gl-codes">Accounts</label><input id="gl-codes" name="codes" placeholder="All, or codes e.g. 13600, 31300">
+    </div>
+    <label class="check"><input type="checkbox" name="open" value="yes"{% if desktop %} checked{% endif %}> Open it when it is ready</label>
+    <div class="actions"><button class="btn" name="format" value="pdf">PDF</button><button class="btn" name="format" value="xlsx">Excel</button>
+      <a class="btn link" href="{{ url_for('ui.account_transactions', slug=client.slug, fy=fy) }}">View on screen</a></div>
+  </form>
+
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="card">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="journal_report">
+    <h2>Journal Report</h2>
+    <p class="help">Every posted journal in FY{{ fy }} with its lines.</p>
+    <label class="check"><input type="checkbox" name="include_void" value="yes" checked> Include void journals</label>
+    <label class="check"><input type="checkbox" name="open" value="yes"{% if desktop %} checked{% endif %}> Open it when it is ready</label>
+    <div class="actions"><button class="btn" name="format" value="pdf">PDF</button><button class="btn" name="format" value="xlsx">Excel</button></div>
+  </form>
+</div>
+{% endif %}
+
+<h2>Saved reports <span class="muted small">in {{ folder }}</span></h2>
+<table class="grid">
+  <thead><tr><th>File</th><th>Saved</th><th class="num">Size</th><th></th></tr></thead>
+  <tbody>
+  {% for p in files %}
+  {% set st = p.stat() %}
+  <tr{% if p.name == new %} class="current"{% endif %}>
+    <td>{% if desktop %}<form method="post" action="{{ url_for('ui.report_open', slug=client.slug, rfy=fy, name=p.name) }}" class="inline-form">{{ m.csrf() }}<button class="btn link">{{ p.name }}</button></form>
+      {% else %}<a href="{{ url_for('ui.report_file', slug=client.slug, rfy=fy, name=p.name) }}" target="_blank" rel="noopener">{{ p.name }}</a>{% endif %}</td>
+    <td class="nowrap">{{ st.st_mtime|mtime }}</td>
+    <td class="num nowrap">{{ st.st_size|filesize }}</td>
+    <td class="nowrap">
+      <form method="post" action="{{ url_for('ui.report_open', slug=client.slug, rfy=fy, name=p.name) }}" class="inline-form">{{ m.csrf() }}<button class="btn small">Open</button></form>
+      <form method="post" action="{{ url_for('ui.report_open', slug=client.slug, rfy=fy, name=p.name) }}" class="inline-form">{{ m.csrf() }}<input type="hidden" name="folder" value="yes"><button class="btn small link">Show in folder</button></form>
+      <a class="btn small link" href="{{ url_for('ui.report_file', slug=client.slug, rfy=fy, name=p.name, dl=1) }}">Download</a>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" class="empty">No reports saved for FY{{ fy }} yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

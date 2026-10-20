@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Move a client from Xero{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Move a client from Xero</h1><p class="muted">From the files exported from Xero - or connect to Xero and skip the exports.</p></div>
+  <div class="actions"><a class="btn primary" href="{{ url_for('ui.xero_home') }}">{{ m.icon("link") }} Connect to Xero instead</a></div></div>
+<div class="cards two">
+  <div class="card">
+    <h2>Before you cancel the Xero file, export:</h2>
+    <ol class="steps">
+      <li><strong>Chart of accounts</strong> - Accounting &gt; Chart of accounts &gt; Export. Keeps the client's own codes, names and report codes.</li>
+      <li><strong>A trial balance at each year end</strong> you need (at least last year and this year) - Reports &gt; Trial Balance,
+        set the date to the year end, then Export &gt; Excel. The year is read from the report's "As at" date.</li>
+      <li>Optional, for the file: General Ledger Detail and Journal Report for each year, and any attachments you need to keep.
+        Store them in the client's folder in SharePoint.</li>
+    </ol>
+    <p class="help">Each trial balance becomes one import journal at that year end, so every year's closing balances match Xero exactly.
+      Later years post only the difference from the balances carried forward. If any year fails, nothing is kept.</p>
+  </div>
+  <form method="post" enctype="multipart/form-data" class="card">
+    {{ m.csrf() }}
+    <h2>The client</h2>
+    <div class="form-grid compact">
+      <label for="name">Name</label><input id="name" name="name" value="{{ form.get('name', '') }}" required>
+      <label for="type">Entity type</label>
+      <select id="type" name="type">{% for k, v in ENTITY_LABELS.items() %}<option value="{{ k }}"{% if form.get('type') == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+      <label for="legal_name">Legal name</label><input id="legal_name" name="legal_name" value="{{ form.get('legal_name', '') }}">
+      <label for="abn">ABN</label><input id="abn" name="abn" value="{{ form.get('abn', '') }}">
+      <label for="fy_end_day">Year ends</label>
+      <div class="inline"><input id="fy_end_day" name="fy_end_day" value="{{ form.get('fy_end_day', 30) }}" class="tiny" aria-label="Day">
+        <select id="fy_end_month" name="fy_end_month" aria-label="Month">{% for i in range(1, 13) %}<option value="{{ i }}"{% if (form.get('fy_end_month') or 6)|int == i %} selected{% endif %}>{{ ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][i] }}</option>{% endfor %}</select></div>
+      <label for="directors">Signatories</label><textarea id="directors" name="directors" rows="2" placeholder="One per line">{{ form.get('directors', '') }}</textarea>
+    </div>
+    <h2>Files from Xero</h2>
+    <label for="chart">Chart of accounts (CSV)</label><input id="chart" type="file" name="chart" accept=".csv" required>
+    <label for="tbs">Trial balances (Excel or CSV - choose them all at once)</label><input id="tbs" type="file" name="tbs" accept=".xlsx,.xlsm,.csv" multiple required>
+    <div class="actions"><button class="btn primary">Move the client across</button></div>
+  </form>
+</div>
+{% endblock %}

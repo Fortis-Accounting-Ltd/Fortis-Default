@@ -19,12 +19,10 @@ assets/report-map.json so they can be edited without touching code.
 """
 from __future__ import annotations
 
-import csv
 import json
 import math
 import re
 from collections import OrderedDict
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +32,6 @@ SKILL_DIR = Path(__file__).resolve().parent.parent
 # tolerance are reported as INFO (rounding), anything larger is a real error.
 ROUNDING_TOL = 5.0
 DEFAULT_MAP = SKILL_DIR / "assets" / "report-map.json"
-DEFAULT_COA = SKILL_DIR / "assets" / "chart-of-accounts" / "company-default.csv"
 DEFAULT_BOILERPLATE = SKILL_DIR / "assets" / "boilerplate.json"
 
 
@@ -51,8 +48,16 @@ def rnd(x: Any) -> int:
     return int(math.floor(abs(x) + 0.5)) * (1 if x >= 0 else -1)
 
 
-def fmt(n: int | float | None) -> str:
-    """Xero number format: 1,234 / (1,234) / '-' for nil."""
+def fmt(n: int | float | None, decimals: int = 0) -> str:
+    """Xero number format: 1,234 / (1,234) / '-' for nil; decimals=2 gives 1,234.56 (some templates print cents)."""
+    if decimals:
+        x = float(n or 0)
+        q = 10 ** decimals
+        x = math.floor(abs(x) * q + 0.5) / q * (1 if x >= 0 else -1)
+        if x == 0:
+            return "-"
+        s = f"{abs(x):,.{decimals}f}"
+        return f"({s})" if x < 0 else s
     n = rnd(n)
     if n == 0:
         return "-"
@@ -79,188 +84,191 @@ def segs(code: str) -> list[str]:
 
 def strip_code(label: str) -> tuple[str | None, str]:
     """'200 - Sales' -> ('200', 'Sales'); 'Sales' -> (None, 'Sales')."""
-    m = re.match(r"^\s*([0-9][0-9A-Za-z\-/]{1,9})\s*[-:]\s+(.*\S)\s*$", label or "")
+    m = re.match(r"^\s*([0-9][0-9A-Za-z.\-/]{0,11})\s*[-\u2013:]\s+(.*\S)\s*$", label or "")
     if m:
         return m.group(1), m.group(2)
     return None, (label or "").strip()
 
 
 # --------------------------------------------------------------------------- #
-# chart of accounts + mapping
+# report code -> layout slot  (Xero report codes as used in the firm charts)
 # --------------------------------------------------------------------------- #
-@dataclass
-class COA:
-    by_code: dict[str, dict] = field(default_factory=dict)
-    by_name: dict[str, dict] = field(default_factory=dict)
-
-    @classmethod
-    def load(cls, path: str | Path | None = None) -> "COA":
-        coa = cls()
-        p = Path(path or DEFAULT_COA)
-        if not p.exists():
-            return coa
-        with open(p, newline="", encoding="utf-8-sig") as fh:
-            for row in csv.DictReader(fh):
-                row = {k.strip().lower(): (v or "").strip() for k, v in row.items() if k}
-                if not row.get("report_code"):
-                    continue
-                if row.get("code"):
-                    coa.by_code[row["code"]] = row
-                if row.get("name"):
-                    coa.by_name[row["name"].lower()] = row
-        return coa
+ACCUM_RE = re.compile(r"accum|\bless\b|amortis|deprec|written down|impair", re.I)
 
 
-# Keyword rules, applied top-down; first hit wins.  (regex, report_code, note)
-# They only *refine* - the statement side (P&L vs BS, current vs non-current)
-# comes from the Xero account type / section header, and a rule is only used
-# when it is compatible with that side.
-KEYWORD_RULES: list[tuple[str, str, str]] = [
-    # ---- balance sheet: cash
-    (r"cash (in|on) hand|petty cash|till float|undeposited", "ASS.CUR.CAS.OTH", "cash on hand"),
-    (r"term deposit|short.?term deposit", "ASS.CUR.FIN", "term deposit shown as financial asset"),
-    (r"\bbank\b|account\s*#|\*{3}\d|savings|saver|cheque|transaction acc|business acc|westpac|anz|nab|cba|commonwealth|macquarie|bankwest|st ?george|\bing\b|amex|mastercard|visa|credit card|paypal|stripe bal", "BANK", "bank / card account (side decides asset or liability)"),
-    # ---- balance sheet: receivables & tax assets
-    (r"accounts? receivable|trade debtors?|debtors?", "ASS.CUR.REC", "trade debtors"),
-    (r"loan to|loans? - .*(director|shareholder|related|trust|pty)|loan.*receivable|amount owing from|related party receivable|intercompany rec", "ASS.CUR.REC", "loan receivable"),
-    (r"deposit paid|bond paid|rental bond", "ASS.CUR.REC", "deposit/bond paid"),
-    (r"prepay", "ASS.CUR.PRE", "prepayment"),
-    (r"inventory|stock on hand|closing stock|trading stock", "ASS.CUR.INV.INV", "inventory"),
-    (r"work in progress|\bwip\b", "ASS.CUR.INV.WIP", "WIP"),
-    # ---- fixed assets (cost + accumulated depreciation, by class)
-    (r"leasehold|fit.?out|improvements", "ASS.NCA.PPE.LEA", "leasehold improvements"),
-    (r"land|building|property at", "ASS.NCA.PPE.LAN", "land & buildings"),
-    (r"motor vehicle|vehicles?\b|\bcar\b|\bute\b|truck", "ASS.NCA.PPE.MOT", "motor vehicles"),
-    (r"furniture|fixtures?|fittings", "ASS.NCA.PPE.FUR", "furniture & fixtures"),
-    (r"office equip", "ASS.NCA.PPE.OFF", "office equipment"),
-    (r"computer|laptop|it equip|software.*(cost|depn|deprec)", "ASS.NCA.PPE.COM", "computer equipment"),
-    (r"low value pool|\blvp\b", "ASS.NCA.PPE.LVP", "low value pool"),
-    (r"plant|equipment|machinery|tools", "ASS.NCA.PPE.PLA", "plant & equipment"),
-    # ---- intangibles
-    (r"goodwill", "ASS.NCA.INT.GOO", "goodwill"),
-    (r"formation|establishment cost|borrowing cost", "ASS.NCA.INT.OTH", "formation/borrowing costs"),
-    (r"trademark|brand|patent|licen[cs]e.*(asset|cost)|website.*(cost|asset)|intangible|bank guarantee", "ASS.NCA.INT.OTH", "other intangible"),
-    (r"shares in|investment in|units in|managed fund|portfolio|crypto", "ASS.NCA.INV", "investment"),
-    # ---- liabilities: tax
-    (r"\bgst\b|goods and services tax", "LIA.CUR.TAX", "GST"),
-    (r"payg ?w|payg withholding|withholding payable|payg - w", "LIA.CUR.TAX", "PAYG withholding"),
-    (r"payg ?i|payg instal|instalment payable|installment", "LIA.CUR.TAX", "PAYG instalment"),
-    (r"income tax payable|provision for (income )?tax|tax payable|ito payable|fbt payable|fringe benefits tax payable|ato integrated|integrated client|running balance|\bica\b|\bita\b", "LIA.CUR.TAX", "income tax / ATO account"),
-    # ---- liabilities: personnel
-    (r"superannuation payable|super payable|super clearing|superannuation liability|sgc payable", "LIA.CUR.EMP", "superannuation payable"),
-    (r"wages payable|payroll (clearing|liabilit)|salaries payable|accrued wages|net pay|employee (reimb|deduct)|child support|payroll tax payable", "LIA.CUR.EMP", "payroll liability"),
-    # ---- liabilities: provisions
-    (r"provision for (annual|holiday|long service|employee|bonus|rent|make ?good|doubtful|warranty)|leave provision|holiday pay provision|annual leave|long service leave", "LIA.CUR.PRO", "provision"),
-    # ---- liabilities: payables
-    (r"accounts? payable|trade creditors?|creditors?|accrued expenses|accruals|sundry payable|client control|trust liabilit|revenue owned|unearned|income in advance|deposits held|customer deposits|clearing|suspense|rounding|historical adjustment", "LIA.CUR.PAY", "trade / other payable"),
-    # ---- liabilities: loans
-    (r"hire purchase|chattel|equipment finance|lease liabilit|\bhp\b", "LIA.NCA.FIN.SEC", "secured finance"),
-    (r"loan|borrowings|mortgage|line of credit|overdraft|finance", "LIA.NCA.FIN.UNS", "loan (defaults to non-current unsecured)"),
-    # ---- equity
-    (r"dividend", "EQU.DIV", "dividends paid"),
-    (r"current year earnings|current year profit|profit for the year|net income", "EQU.CYE", "current year earnings"),
-    (r"retained (earnings|profits)|accumulated (losses|profits)", "EQU.RET", "retained earnings"),
-    (r"share capital|paid.?up|ordinary shares|issued capital|contributed equity", "EQU.SHA", "share capital"),
-    (r"reserve", "EQU.RES", "reserve"),
-    (r"drawings", "EQU.DRA", "drawings"),
-    (r"capital account|settled sum|trust capital|partner.*capital|beneficiar", "EQU.CAP", "capital / beneficiary account"),
-    # ---- P&L: income
-    (r"interest (received|income|earned)|bank interest", "REV.OTH", "interest received"),
-    (r"dividends? (received|income)|distribution(s)? (received|income)|trust distribution", "REV.OTH", "dividends/distributions received"),
-    (r"rent(al)? (received|income)|rent income", "REV.OTH", "rent received"),
-    (r"fbt (employee )?contribution|employee contribution", "REV.OTH", "FBT employee contribution"),
-    (r"gain on|profit on (sale|disposal)|currency gain|forex gain|exchange gain", "REV.OTH", "gains"),
-    (r"grant|subsid|cash ?flow boost|jobkeeper|refund|other income|sundry income|recover|reimburse|overrides?|rebate|commission(s)? (received|collected|income)?$", "REV.OTH", "other income"),
-    (r"sales|revenue|fees? (collected|income|received)?|income|commission|consulting|services|turnover|takings|charges", "REV.TRA", "trading income"),
-    # ---- P&L: cost of sales
-    (r"opening stock|closing stock|purchases|cost of (goods|sales)|direct (cost|labour|wages|material)|subcontract|freight in|materials|stock adjust|cogs", "EXP.COS", "cost of sales"),
-    # ---- P&L: tax & dividends
-    (r"income tax( expense)?$|income tax expense|tax expense|company tax", "EXP.TAX", "income tax expense"),
-]
-
-SIDE_OF = {
-    "REV": "pl", "EXP": "pl",
-    "ASS": "bs", "LIA": "bs", "EQU": "bs",
-}
-
-# Xero section headers (as they appear in P&L / BS exports) -> Xero account type
-SECTION_TO_TYPE = {
-    "trading income": "Revenue", "income": "Revenue", "revenue": "Revenue", "sales": "Revenue",
-    "cost of sales": "Direct Costs", "less cost of sales": "Direct Costs", "cost of goods sold": "Direct Costs",
-    "other income": "Other Income", "plus other income": "Other Income",
-    "operating expenses": "Expense", "less operating expenses": "Expense", "expenses": "Expense",
-    "bank": "Bank", "current assets": "Current Asset", "inventory": "Inventory", "prepayments": "Prepayment",
-    "fixed assets": "Fixed Asset", "non-current assets": "Non-current Asset", "non current assets": "Non-current Asset",
-    "current liabilities": "Current Liability", "liabilities": "Liability",
-    "non-current liabilities": "Non-current Liability", "non current liabilities": "Non-current Liability",
-    "equity": "Equity",
-}
-
-TYPE_SIDE = {
-    "Revenue": "pl", "Sales": "pl", "Other Income": "pl", "Direct Costs": "pl", "Expense": "pl",
-    "Overheads": "pl", "Depreciation": "pl",
-    "Bank": "bs", "Current Asset": "bs", "Inventory": "bs", "Prepayment": "bs", "Fixed Asset": "bs",
-    "Non-current Asset": "bs", "Current Liability": "bs", "Liability": "bs", "Non-current Liability": "bs",
-    "Equity": "bs",
-}
+def slot_set(rmap: dict) -> set[str]:
+    """Every layout position the engine understands (they can be used directly as report codes)."""
+    out = set(rmap["bs_lines"])
+    for key, info in rmap["bs_lines"].items():
+        note = rmap["notes"].get(info.get("note") or "", {})
+        for cls in (note.get("classes") or {}):
+            out.add(f"{key}.{cls}")
+        for l2 in (note.get("level2") or {}):
+            out.add(f"{key}.{l2}")
+    for secs in [rmap["pnl_sections"]] + [lay.get("pnl_sections") or [] for k, lay in
+                                          (rmap.get("entity_layouts") or {}).items() if not k.startswith("_")]:
+        for sec in secs:
+            for c in [sec.get("code")] + list(sec.get("also_codes") or []):
+                if c:
+                    out.add(c)
+    out.update({"EQU.CYE", "EQU.DIV", "EQU.SET", "EQU.PFT", "EXP.CFL", "EXP.DIS", "EXP.DIS.ADJ", "LIA.NCA.BEN"})
+    return out
 
 
-def infer_report_code(name: str, acct_type: str | None, coa: COA, rmap: dict, code: str | None = None,
-                      balance_hint: float | None = None) -> tuple[str, str, str]:
+def _pnl_heading_for(slot: str, rmap: dict) -> str | None:
+    for secs in [rmap["pnl_sections"]] + [lay.get("pnl_sections") or [] for k, lay in
+                                          (rmap.get("entity_layouts") or {}).items() if not k.startswith("_")]:
+        for sec in secs:
+            if sec.get("code") == slot:
+                return sec["heading"]
+    return None
+
+
+def ppe_class(name: str, parts: list[str], rmap: dict) -> tuple[str, bool]:
     """
-    Returns (report_code, confidence, reason).
-    confidence: 'coa' (explicit chart), 'rule' (keyword rule), 'type' (type default), 'none'.
+    Class of a Property, Plant and Equipment account.  Xero groups by report code, so the class is the
+    code's class segment (ASS.NCA.FIX.PLA -> PLA); ppe_class_refine splits a code by account name only
+    where the firm chart lumps natures together (pools / staff amenities in BUC, a bare ASS.NCA.FIX).
+    Returns (class, decided_by_name).
     """
-    # 1. explicit chart of accounts match (by code, then by name)
-    row = None
-    if code and code in coa.by_code:
-        row = coa.by_code[code]
-    elif name and name.lower() in coa.by_name:
-        row = coa.by_name[name.lower()]
-    if row:
-        return row["report_code"], "coa", f"chart of accounts ({row.get('code') or 'name match'})"
-
     lname = (name or "").lower()
-    side = TYPE_SIDE.get(acct_type or "", None)
-    type_default = rmap["type_defaults"].get(acct_type or "", None)
+    seg = parts[3] if len(parts) > 3 else "FIX"
+    for rx, cls in (rmap.get("ppe_class_refine") or {}).get(seg, []):
+        if re.search(rx, lname):
+            return cls, True
+    by_code = rmap.get("ppe_class_by_code", {})
+    return by_code.get(seg, rmap["notes"]["ppe"].get("default_class", "PLA")), seg != "FIX"
 
-    # 2. keyword rules compatible with the side we know
-    for pattern, rcode, why in KEYWORD_RULES:
-        if not re.search(pattern, lname):
-            continue
-        if rcode == "BANK":
-            # a bank/card account: asset if debit balance (or Bank type), liability if credit card
-            if acct_type in ("Current Liability", "Liability") or re.search(r"credit card|mastercard|visa|amex", lname):
-                return "LIA.CUR.PAY", "rule", f"{why} -> card/overdraft shown in payables"
-            return "ASS.CUR.CAS.BAN", "rule", why
-        rside = SIDE_OF.get(segs(rcode)[0])
-        if side and rside != side:
-            continue  # e.g. 'Depreciation' expense must not map to the PPE asset rule
-        # keep current/non-current from the type when the type says so
-        if acct_type == "Non-current Liability" and rcode.startswith("LIA.CUR.") and not rcode.startswith("LIA.CUR.TAX"):
-            rcode = rcode.replace("LIA.CUR.", "LIA.NCA.", 1)
-        if acct_type in ("Current Liability", "Liability") and rcode.startswith("LIA.NCA.FIN"):
-            rcode = rcode.replace("LIA.NCA.", "LIA.CUR.", 1)
-        if acct_type == "Non-current Asset" and rcode.startswith("ASS.CUR."):
-            rcode = rcode.replace("ASS.CUR.", "ASS.NCA.", 1)
-        if acct_type == "Fixed Asset" and not rcode.startswith("ASS.NCA.PPE"):
-            rcode = rmap["type_defaults"]["Fixed Asset"]
-        return rcode, "rule", why
 
-    # 3. type default
-    if type_default:
-        return type_default, "type", f"Xero account type '{acct_type}' default"
-    return "", "none", "no chart match, no keyword rule, no account type"
+def resolve_slot(code: str, name: str, rmap: dict, _slots: set[str] | None = None) -> tuple[str | None, int | None, bool]:
+    """
+    Xero report code (+ account name) -> (layout slot, person number, ppe_class_inferred_from_code).
+    Longest matching prefix in xero_code_map / the layout's own codes wins.  A trailing
+    .1/.2/... on an equity or beneficiary code is the partner / beneficiary number.
+    """
+    code = (code or "").strip().upper()
+    if not code:
+        return None, None, False
+    parts = code.split(".")
+    person = None
+    xmap = {k: v for k, v in (rmap.get("xero_code_map") or {}).items() if not k.startswith("_")}
+    if len(parts) > 2 and parts[-1].isdigit() and code not in xmap:
+        person = int(parts[-1])
+        parts = parts[:-1]
+    slots = _slots if _slots is not None else slot_set(rmap)
+    for n in range(len(parts), 0, -1):
+        pref = ".".join(parts[:n])
+        if pref in xmap:
+            entry = xmap[pref]
+            slot = entry["slot"]
+            lname = (name or "").lower()
+            for rx, alt in entry.get("refine", []):
+                if re.search(rx, lname):
+                    slot = alt
+                    break
+            class_inferred = False
+            if entry.get("ppe_class"):
+                cls, decided = ppe_class(name, parts, rmap)
+                slot = f"{slot}.{cls}"
+                class_inferred = not decided
+            return slot, (person if slot.startswith(("EQU", "LIA.NCA.BEN")) else None), class_inferred
+        if pref in slots:
+            return pref, (person if pref.startswith(("EQU", "LIA.NCA.BEN")) else None), False
+    return None, None, False
+
+
+def describe_code(code: str, name: str, rmap: dict) -> str:
+    """Plain-English 'where does this print' for a report code - used in mapping tables."""
+    slot, person, _ = resolve_slot(code, name, rmap)
+    if not slot:
+        return "UNKNOWN report code - not in xero_code_map or the layout"
+    s = segs(slot)
+    who = f" (person #{person})" if person else ""
+    if slot == "EXP.DIS":
+        return "P&L: distributions to beneficiaries / partners (trust and partnership packs)"
+    heading = _pnl_heading_for(slot, rmap)
+    if heading:
+        return f"P&L: {heading}"
+    if slot == "EXP.DIS.ADJ":
+        return "P&L: distribution section - reconciliation adjustment line"
+    if s[0] == "EQU":
+        labels = {"EQU.CYE": "Current year earnings (folded into Retained Earnings)",
+                  "EQU.DIV": "Dividends (P&L Dividend Paid; deducted from Retained Earnings)",
+                  "EQU.PFT": "Share of profit (partner / beneficiary account)", "EQU.SET": "Settled sum / unit capital"}
+        lab = labels.get(slot) or rmap["bs_lines"].get(slot, {}).get("label", slot)
+        return f"Equity: {lab}{who}"
+    if slot == "EXP.CFL":
+        return "P&L: losses applied (before distributions)"
+    if slot == "LIA.NCA.BEN":
+        return f"Non-Current Liabilities: beneficiary entitlements{who}"
+    key = None
+    if len(s) >= 4 and ".".join(s[:4]) in rmap["bs_lines"]:
+        key = ".".join(s[:4])
+    elif len(s) >= 3 and ".".join(s[:3]) in rmap["bs_lines"]:
+        key = ".".join(s[:3])
+    if not key:
+        return f"layout slot {slot} (no Balance Sheet line)"
+    info = rmap["bs_lines"][key]
+    part = {"CUR": "Current", "NCA": "Non-Current"}.get(s[1], s[1])
+    side = {"ASS": "Assets", "LIA": "Liabilities"}[s[0]]
+    note = rmap["notes"].get(info.get("note") or "", {})
+    tier = ""
+    if note.get("levels") == "class":
+        cls = s[3] if len(s) > 3 and s[3] in note.get("classes", {}) else note.get("default_class")
+        tier = note["classes"].get(cls, "") if cls else ""
+    elif note.get("levels") == "cur_ncu":
+        tier = note["cur_label"] if s[1] == "CUR" else note["ncu_label"]
+        if len(s) > 3 and s[3] in (note.get("level2") or {}):
+            tier += f" > {note['level2'][s[3]]}"
+    elif note.get("levels") == "payables":
+        for k in sorted(note["subgroup_order"], key=len, reverse=True):
+            if slot == k or slot.startswith(k + "."):
+                tier = note["subgroups"][k]
+                break
+    where = f"Note {note.get('title', '-')}" + (f" > {tier}" if tier else "")
+    return f"{part} {side}: {info['label']} - {where}"
 
 
 # --------------------------------------------------------------------------- #
 # the pack builder
 # --------------------------------------------------------------------------- #
+CY_PY = ("cy", "py")
+ZERO = {"cy": 0.0, "py": 0.0}
+# how the company P&L computed lines are formed when a layout gives no formula
+LEGACY_FORMULAS = {
+    "gross": {"add": ["income"], "sub": ["cos"]},
+    "total_income": {"add": ["gross", "other"]},
+    "pbt": {"add": ["total_income"], "sub": ["expenses"]},
+    "npat": {"add": ["pbt"], "sub": ["tax"]},
+    "npat_div": {"add": ["npat"], "sub": ["dividends"]},
+    "npat_dist": {"add": ["npat_div"], "sub": ["distributions"]},
+}
+DEFAULT_BS_EQUITY = [
+    {"value": "retained_display", "label": "Retained Earnings", "always": True},
+    {"value": "reserves", "label": "Reserves"},
+    {"value": "share_capital", "label": "Share Capital"},
+    {"value": "capital", "label": "Capital Accounts"},
+    {"value": "drawings", "label": "Drawings"},
+    {"value": "other", "label": "Other Equity"},
+    {"value": "settled", "label": "@accounts"},
+]
+PERSON_SLOTS = ("EQU.CAP", "EQU.DRA", "EQU.PFT")
+GENERIC_WORDS = re.compile(r"^(#?\s*\d+|partner|beneficiary|beneficiaries|owner|proprietor|education(al)?|income tax|"
+                           r"life (insurance|assurance)|medicare|medical|superannuation|salary|other|rates and taxes|"
+                           r"clearing account.*|opening balance|funds contributed|drawings|share of profits?)$", re.I)
+
+
+def _plus(a: dict, b: dict, k: float = 1.0) -> dict:
+    return {c: a[c] + k * b[c] for c in CY_PY}
+
+
 class Pack:
     def __init__(self, data: dict, rmap: dict | None = None):
         self.src = data
         self.map = rmap or load_map(data.get("report_map"))
         self.entity = data["entity"]
+        self.etype = (self.entity.get("type") or "company").strip().lower().replace(" ", "_").replace("-", "_")
+        self.layout = self._layout()
         self.options = {
             "sort": "alpha",                  # alpha | source
             "cost_of_sales_label": "Cost of Sales",
@@ -269,37 +277,83 @@ class Pack:
             "include_inventory_policy": None,  # None = auto (only when inventory exists)
             "depreciation_layout": None,       # simple | standard | register
             "report_order": None,
+            "decimals": 0,
+            "bs_line_labels": {},              # e.g. {"ASS.CUR.REC": "Trade and Other Receivables"}
+            "note_titles": {},                 # e.g. {"receivables": "Trade and Other Receivables"}
+            "contents_page_numbers": True,     # Xero prints the start page of each report on the Contents page
+            "cos_lines": "accounts",           # accounts | grouped (Opening inventory / Purchases / Closing inventory)
+            "cos_group_labels": {},            # e.g. {"opening": "Opening stock", "closing": "Closing stock"}
         }
+        self.options.update(self.layout.get("options") or {})
         self.options.update(data.get("options") or {})
         self.accounts = [dict(a) for a in data.get("accounts", [])]
         self.extra_equity_movements = data.get("equity_movements") or []
         self.depreciation = data.get("depreciation")
         self.validation: list[dict] = []
         self._normalise_accounts()
+        sc = self.options.get("single_column")
+        self.single_column = bool(sc) if sc is not None else (bool(self.accounts) and all(rnd(a["py"]) == 0 for a in self.accounts))
+        self.rental = self._build_rental()
         self.pnl = self._build_pnl()
         self.equity_lines = self._equity_lines()
+        self.persons = self._build_persons()
+        self.distribution = self._build_distribution_statement()
         self.notes = self._build_notes()
         self.bs = self._build_bs()
         self.equity = self._build_equity_statement()
         self.depn = self._build_depreciation()
         self._validate()
 
+    # ---- entity layout -------------------------------------------------- #
+    def _layout(self) -> dict:
+        """report-map.json entity_layouts.<type> laid over the company defaults."""
+        layouts = {k: v for k, v in (self.map.get("entity_layouts") or {}).items() if not k.startswith("_")}
+        lay = {"reports": None, "pnl_sections": self.map["pnl_sections"], "notes_order": self.map["notes_order"],
+               "bs_equity": DEFAULT_BS_EQUITY, "persons": None, "distribution_statement": None,
+               "rental_schedule": None, "options": {}}
+        lay.update(layouts.get(self.etype) or {})
+        return lay
+
+    def reports(self) -> list[str]:
+        """Reports in print order (options.report_order wins, then the entity layout, then the company default)."""
+        return list(self.options.get("report_order") or self.layout.get("reports")
+                    or ["pnl", "bs", "equity", "notes", "depreciation", "declaration", "compilation"])
+
     # ---- accounts ------------------------------------------------------- #
     def _normalise_accounts(self):
-        for a in self.accounts:
+        slots = slot_set(self.map)
+        last_ppe = None  # slot of the last PPE cost line, in ledger (workpaper) order
+        for i, a in enumerate(self.accounts):
+            a["_seq"] = i
             a["cy"] = float(a.get("cy") or 0)
             a["py"] = float(a.get("py") or 0)
             a["report_code"] = (a.get("report_code") or "").upper()
             a.setdefault("name", "")
             a["display_name"] = a.get("display_name") or a["name"]
+            a["slot"] = ""
             if not a["report_code"]:
                 self.validation.append({"level": "error", "check": "mapping",
                                         "detail": f"Account '{a['name']}' has no report code - map it before rendering."})
+                continue
+            slot, person, class_inferred = resolve_slot(a["report_code"], a["name"], self.map, slots)
+            if slot is None:
+                self.validation.append({"level": "error", "check": "mapping",
+                                        "detail": f"Account '{a['name']}' report code {a['report_code']} is not a known Xero report code or layout code (report-map.json xero_code_map)."})
+                continue
+            if slot.startswith("ASS.NCA.PPE"):
+                # an accumulated depreciation line whose name gives no class follows its cost line
+                if ACCUM_RE.search(a["name"]) and class_inferred and last_ppe:
+                    slot = last_ppe
+                elif not ACCUM_RE.search(a["name"]):
+                    last_ppe = slot
+            a["slot"] = slot
+            if person is not None:
+                a.setdefault("person", person)
         if not self.options["keep_nil_accounts"]:
             self.accounts = [a for a in self.accounts if rnd(a["cy"]) != 0 or rnd(a["py"]) != 0 or a.get("keep")]
 
     def _accts(self, prefix: str) -> list[dict]:
-        rows = [a for a in self.accounts if a["report_code"] == prefix or a["report_code"].startswith(prefix + ".")]
+        rows = [a for a in self.accounts if a["slot"] == prefix or a["slot"].startswith(prefix + ".")]
         if self.options["sort"] == "alpha":
             rows.sort(key=lambda a: a["display_name"].lower())
         return rows
@@ -308,68 +362,254 @@ class Pack:
     def _sum(rows: list[dict]) -> dict:
         return {"cy": sum(r["cy"] for r in rows), "py": sum(r["py"] for r in rows)}
 
+    # ---- rental schedule -------------------------------------------------- #
+    def _build_rental(self) -> dict | None:
+        """Rental property accounts (REV.INV.REN / EXP.INV.REN) taken out of the P&L body and shown in a
+        Rental Schedule, with one net 'Rental income/(loss)' line in Other Income (partnership / trust packs)."""
+        cfg = self.options.get("rental_schedule", self.layout.get("rental_schedule"))
+        if not cfg:
+            return None
+        cfg = cfg if isinstance(cfg, dict) else {}
+        prefixes = cfg.get("codes") or ["REV.INV.REN", "EXP.INV.REN"]
+        rows = [a for a in self.accounts if a["slot"].startswith(("REV", "EXP"))
+                and any(a["report_code"] == p or a["report_code"].startswith(p + ".") for p in prefixes)]
+        if not rows:
+            return None
+        for a in rows:
+            a["rental"] = True
+        key = (lambda a: a["display_name"].lower()) if self.options["sort"] == "alpha" else (lambda a: a["_seq"])
+        inc = sorted([a for a in rows if a["slot"].startswith("REV")], key=key)
+        exp = sorted([a for a in rows if not a["slot"].startswith("REV")], key=key)
+        ti, te = self._sum(inc), self._sum(exp)
+        return {"title": cfg.get("title", "Rental Schedule"), "label": cfg.get("line_label", "Rental income/(loss)"),
+                "income": inc, "expenses": exp, "income_total": ti, "expenses_total": te, "net": _plus(ti, te, -1)}
+
     # ---- profit and loss ---------------------------------------------- #
+    def _cos_groups(self, rows: list[dict]) -> list[dict]:
+        """Cost of sales as Xero's grouped trading account (partnership packs): one line each for
+        opening inventory, purchases (every other cost-of-sales account) and closing inventory."""
+        labels = {"opening": "Opening inventory", "purchases": "Purchases", "closing": "Closing inventory",
+                  **(self.options.get("cos_group_labels") or {})}
+        groups: dict[str, list] = {"opening": [], "purchases": [], "closing": []}
+        for r in rows:
+            rc = str(r.get("report_code") or "").upper()
+            if rc.startswith("EXP.COS.OPE") or re.search(r"opening", r["display_name"], re.I):
+                groups["opening"].append(r)
+            elif rc.startswith("EXP.COS.CLO") or re.search(r"closing", r["display_name"], re.I):
+                groups["closing"].append(r)
+            else:
+                groups["purchases"].append(r)
+        return [{"label": labels[g], **self._sum(groups[g]), "code": None, "slot": "EXP.COS"}
+                for g in ("opening", "purchases", "closing") if groups[g]]
+
     def _build_pnl(self) -> dict:
         out = {"sections": [], "totals": {}}
         t: dict[str, dict] = {}
-        for sec in self.map["pnl_sections"]:
+        for sec in self.layout["pnl_sections"]:
             key = sec["key"]
             if sec.get("computed"):
-                if key == "gross":
-                    val = {c: t["income"][c] - t["cos"][c] for c in ("cy", "py")}
-                elif key == "total_income":
-                    val = {c: t["gross"][c] + t["other"][c] for c in ("cy", "py")}
-                elif key == "pbt":
-                    val = {c: t["total_income"][c] - t["expenses"][c] for c in ("cy", "py")}
-                elif key == "npat":
-                    val = {c: t["pbt"][c] - t["tax"][c] for c in ("cy", "py")}
-                elif key == "npat_div":
-                    val = {c: t["npat"][c] - t["dividends"][c] for c in ("cy", "py")}
-                else:
-                    val = {"cy": 0, "py": 0}
+                f = sec.get("formula") or LEGACY_FORMULAS.get(key, {})
+                val = {c: sum(t.get(k, ZERO)[c] for k in f.get("add", [])) - sum(t.get(k, ZERO)[c] for k in f.get("sub", []))
+                       for c in CY_PY}
                 t[key] = val
-                out["sections"].append({"key": key, "computed": True, "label": sec["label"], **val})
+                show = not sec.get("hidden")
+                dep = sec.get("hide_if_nil_section") or sec.get("show_with")
+                if dep:
+                    dep_sec = next((x for x in out["sections"] if x["key"] == dep), None)
+                    show = show and bool(dep_sec and dep_sec.get("show"))
+                out["sections"].append({"key": key, "computed": True, "label": sec["label"], "show": show, **val})
                 continue
-            rows = self._accts(sec["code"])
+            codes = [sec["code"]] + list(sec.get("also_codes") or [])
+            rows, seen = [], set()
+            for code in codes:
+                for a in self._accts(code):
+                    if id(a) not in seen and not a.get("rental"):
+                        seen.add(id(a))
+                        rows.append(a)
+            if self.options["sort"] == "alpha" and len(codes) > 1:
+                rows.sort(key=lambda a: a["display_name"].lower())
+            if key == "cos" and self.options.get("cos_stock_order", True):
+                # opening stock first, closing stock last (Xero prints the trading account that way)
+                rows.sort(key=lambda a: 0 if re.search(r"opening", a["display_name"], re.I)
+                          else 2 if re.search(r"closing", a["display_name"], re.I) else 1)
             total = self._sum(rows)
+            lines = [{"label": r["display_name"], "cy": r["cy"], "py": r["py"], "code": r.get("code"), "slot": r["slot"]}
+                     for r in rows]
+            if key == "cos" and self.options.get("cos_lines") == "grouped" and rows:
+                lines = self._cos_groups(rows)
+            if sec.get("rental_line") and self.rental:
+                net = self.rental["net"]
+                lines.append({"label": self.rental["label"], "cy": net["cy"], "py": net["py"], "code": None, "slot": "RENTAL"})
+                if self.options["sort"] == "alpha":
+                    lines.sort(key=lambda l: l["label"].lower())
+                total = _plus(total, net)
+            if sec.get("collapse_label") and lines:
+                main = sec["code"]
+                keep = [l for l in lines if l["slot"] != main]
+                coll = [l for l in lines if l not in keep]
+                lines = keep + ([{"label": sec["collapse_label"], **self._sum(coll), "code": None, "slot": main}] if coll else [])
+            sign = float(sec.get("sign", 1))
+            if sign != 1:
+                lines = [{**l, "cy": l["cy"] * sign, "py": l["py"] * sign} for l in lines]
             t[key] = total
             heading = sec["heading"]
             total_label = sec["total"]
             if key == "cos":
                 heading = self.options["cost_of_sales_label"] or heading
                 total_label = sec.get("alt_headings", {}).get(heading, total_label)
-            show = bool(rows) and not (sec.get("hide_if_nil") and total["cy"] == 0 and total["py"] == 0)
+            show = bool(lines) and not (sec.get("hide_if_nil") and rnd(total["cy"]) == 0 and rnd(total["py"]) == 0)
             out["sections"].append({
-                "key": key, "computed": False, "heading": heading, "total_label": total_label,
-                "lines": [{"label": r["display_name"], "cy": r["cy"], "py": r["py"], "code": r.get("code")} for r in rows],
-                "show": show, **total,
+                "key": key, "computed": False, "heading": heading, "total_label": total_label, "lines": lines,
+                "show": show, "sign": sign, "cy": total["cy"] * sign, "py": total["py"] * sign,
             })
+        for k in ("income", "cos", "other", "expenses", "tax", "dividends", "distributions"):
+            t.setdefault(k, dict(ZERO))
+        if "npat" not in t:
+            t["npat"] = _plus(t.get("pbt", ZERO), t["tax"], -1)
+        t.setdefault("npat_div", _plus(t["npat"], t["dividends"], -1))
+        t.setdefault("total_income", _plus(_plus(t["income"], t["cos"], -1), t["other"]))
+        # what stays in the entity after tax, dividends and distributions (= Profit for the Period)
+        t["retained_profit"] = _plus(t["npat_div"], t["distributions"], -1)
         out["totals"] = t
         return out
 
     # ---- equity helper -------------------------------------------------- #
     def _equity_lines(self) -> dict:
+        """
+        Xero keeps Retained Earnings (prior years), Current Year Earnings and dividends apart; the
+        pack prints them as one Retained Earnings line.  Current Year Earnings is whatever the P&L
+        bottom line is in the ledger: NPAT, less any dividends and distributions that were posted
+        through the P&L (a workpaper '506 - Dividend paid' line, trust / partnership distributions).
+        """
         ret = self._sum(self._accts("EQU.RET"))
         cye = self._accts("EQU.CYE")
-        div = self._sum(self._accts("EQU.DIV"))
+        div_rows = self._accts("EQU.DIV")
+        div = self._sum(div_rows)
+        div_pl = self._sum([a for a in div_rows if str(a.get("source", "")).startswith("pl")])
+        div_bs = _plus(div, div_pl, -1)
+        dist = self.pnl["totals"]["distributions"]
         npat = self.pnl["totals"]["npat"]
+        expected = {c: npat[c] - div_pl[c] - dist[c] for c in CY_PY}
         if cye:
             cye_tot = self._sum(cye)
-            for c in ("cy", "py"):
-                if abs(cye_tot[c] - npat[c]) > 0.5:
+            for c in CY_PY:
+                if abs(cye_tot[c] - expected[c]) > 0.5:
                     self.validation.append({"level": "error", "check": "current_year_earnings",
-                                            "detail": f"Current Year Earnings on the Balance Sheet ({c.upper()}: {fmt(cye_tot[c])}) does not equal Net Profit After Tax per the P&L ({fmt(npat[c])})."})
+                                            "detail": f"Current Year Earnings on the Balance Sheet ({c.upper()}: {fmt(cye_tot[c])}) does not equal the P&L result it should carry ({fmt(expected[c])} = Net Profit After Tax {fmt(npat[c])}"
+                                                      f"{' less dividends in the P&L ' + fmt(div_pl[c]) if rnd(div_pl[c]) else ''}{' less distributions ' + fmt(dist[c]) if rnd(dist[c]) else ''})."})
         else:
-            cye_tot = dict(npat)
+            cye_tot = expected
+        person_rows = [a for a in self.accounts if a["slot"].startswith(PERSON_SLOTS)]
         return {
-            "retained_prior": ret, "cye": cye_tot, "dividends": div,
-            "retained_display": {c: ret[c] + cye_tot[c] - div[c] for c in ("cy", "py")},
+            "retained_prior": ret, "cye": cye_tot, "dividends": div, "dividends_bs": div_bs, "distributions": dist,
+            "retained_display": {c: ret[c] + cye_tot[c] - div_bs[c] for c in CY_PY},
             "share_capital": self._sum(self._accts("EQU.SHA")),
             "reserves": self._sum(self._accts("EQU.RES")),
             "drawings": self._sum(self._accts("EQU.DRA")),
             "capital": self._sum(self._accts("EQU.CAP")),
             "other": self._sum(self._accts("EQU.OTH")),
+            "settled": self._sum(self._accts("EQU.SET")),
+            "profit_share": self._sum(self._accts("EQU.PFT")),
+            "persons": self._sum(person_rows),
         }
+
+    # ---- partner / beneficiary accounts ---------------------------------- #
+    @staticmethod
+    def _person_name(a: dict) -> str:
+        if a.get("person_name"):
+            return a["person_name"]
+        parts = [p.strip() for p in re.split(r"\s+[-–]\s+", a.get("name") or "") if p.strip()]
+        for cand in reversed(parts[1:]):
+            cand = re.sub(r"^(partner|beneficiary|owner|proprietor)\s*", "", cand, flags=re.I).strip(" #")
+            if cand and not GENERIC_WORDS.match(cand):
+                return cand
+        return f"#{a['person']}" if a.get("person") else ""
+
+    def _build_persons(self) -> dict | None:
+        """
+        Partner Accounts / Beneficiary Accounts: one block per person from the per-person equity accounts
+        (funds contributed EQU.ADV.n, drawings EQU.DRA.n, share of profits EQU.PFT.n), Xero style.
+        The person is read from the account name ('Drawings - Jane Citizen') or the code's number.
+        An account whose name says 'opening' is that person's brought-forward balance.
+        """
+        cfg = self.layout.get("persons")
+        if not cfg:
+            return None
+        accts = sorted([a for a in self.accounts if a["slot"].startswith(PERSON_SLOTS)], key=lambda a: a["_seq"])
+        if not accts:
+            return None
+        groups: list[dict] = []
+        for a in accts:
+            name = self._person_name(a)
+            toks = set(re.findall(r"[a-z0-9#]+", name.lower()))
+            g = next((g for g in groups if toks and g["toks"] and (toks <= g["toks"] or g["toks"] <= toks)), None)
+            if g is None:
+                g = {"name": name, "toks": toks, "accounts": []}
+                groups.append(g)
+            elif len(name) > len(g["name"]):
+                g["name"], g["toks"] = name, toks
+            g["accounts"].append(a)
+
+        def cat(a):
+            if re.search(r"opening", a["name"], re.I):
+                return "opening"
+            return {"EQU.CAP": "introduced", "EQU.DRA": "drawn", "EQU.PFT": "profit"}.get(".".join(segs(a["slot"])[:2]), "other")
+
+        persons = []
+        for i, g in enumerate(groups, 1):
+            rows = []
+            opening = [a for a in g["accounts"] if cat(a) == "opening"]
+            if opening:
+                rows.append({"label": cfg.get("opening_label", "Opening Balance"), "cat": "opening", **self._sum(opening)})
+            for a in g["accounts"]:
+                if cat(a) != "opening":
+                    rows.append({"label": a["display_name"], "cat": cat(a), "cy": a["cy"], "py": a["py"]})
+            heading = g["name"] if (cfg.get("heading") == "name" and g["name"] and not g["name"].startswith("#")) \
+                else f"{cfg.get('person_label', 'Partner')} {i}"
+            persons.append({"number": i, "name": g["name"], "heading": heading, "rows": rows, **self._sum(g["accounts"])})
+        summary = []
+        for catkey, label in cfg.get("summary_rows", [["opening", "Opening Balance"], ["introduced", "Funds Introduced"],
+                                                       ["drawn", "Funds Drawn"], ["profit", "Profit Distributed"],
+                                                       ["other", "Other Movements"]]):
+            v = self._sum([r for p in persons for r in p["rows"] if r["cat"] == catkey])
+            if rnd(v["cy"]) or rnd(v["py"]):
+                summary.append({"label": label, **v})
+        if not any(r["cat"] == "opening" for p in persons for r in p["rows"]) and any(rnd(a["py"]) for a in accts):
+            self.validation.append({"level": "info", "check": "person_accounts",
+                                    "detail": f"No 'Opening balance' account per {cfg.get('person_label', 'partner').lower()} - the {cfg.get('title', 'accounts')} statement lists each account's balance as it stands in the workpaper. Post the brought-forward balance to an 'Opening balance - <name>' account if the statement should show opening balance + movements."})
+        return {"title": cfg.get("title", "Partner Accounts"), "summary_title": cfg.get("summary_title", "Partner Accounts Summary"),
+                "detail_title": cfg.get("detail_title", "Detailed Partner Accounts"), "persons": persons,
+                "summary": summary, **self._sum(accts)}
+
+    # ---- trust income distribution ---------------------------------------- #
+    def _build_distribution_statement(self) -> dict | None:
+        cfg = self.layout.get("distribution_statement")
+        if not cfg:
+            return None
+        cfl = sorted(self._accts("EXP.CFL"), key=lambda a: a["_seq"])
+        dist = sorted([a for a in self._accts("EXP.DIS")], key=lambda a: a["_seq"])
+        if not (cfl or dist) and not cfg.get("always"):
+            return None
+        cye = self.pnl["totals"]["npat"]
+        rows = [{"kind": "line", "label": cfg.get("cye_label", "Current Year Earnings"), **cye}]
+        cfl_tot = self._sum(cfl)
+        if cfl:
+            rows.append({"kind": "heading", "label": cfg.get("cfl_heading", "Carried Forward Losses Applied")})
+            rows += [{"kind": "line", "label": a["display_name"], "cy": -a["cy"], "py": -a["py"], "indent": 1} for a in cfl]
+            rows.append({"kind": "total", "label": f"Total {cfg.get('cfl_heading', 'Carried Forward Losses Applied')}",
+                         "cy": -cfl_tot["cy"], "py": -cfl_tot["py"], "indent": 1})
+        net = _plus(cye, cfl_tot, -1)
+        rows.append({"kind": "computed", "label": cfg.get("net_label", "Net Trust Income for Distribution"), **net})
+        dist_tot = self._sum(dist)
+        if dist:
+            rows.append({"kind": "heading", "label": cfg.get("dist_heading", "Distributions to Beneficiaries")})
+            rows += [{"kind": "line", "label": a["display_name"], "cy": a["cy"], "py": a["py"], "indent": 1} for a in dist]
+            rows.append({"kind": "total", "label": f"Total {cfg.get('dist_heading', 'Distributions to Beneficiaries')}",
+                         "indent": 1, **dist_tot})
+        rows.append({"kind": "computed", "label": cfg.get("undistributed_label", "Undistributed Trust Income"),
+                     **_plus(net, dist_tot, -1)})
+        return {"title": cfg.get("title", "Trust Income Distribution"), "heading": cfg.get("heading", "Trust Income Distribution"),
+                "rows": rows}
 
     # ---- notes ---------------------------------------------------------- #
     def _note_key_for(self, code: str) -> str | None:
@@ -393,20 +633,31 @@ class Pack:
         return self.map["bs_lines"].get(k) if k else None
 
     def _build_notes(self) -> list[dict]:
-        notes_cfg = self.map["notes"]
-        by_note: dict[str, list[dict]] = {k: [] for k in self.map["notes_order"]}
+        # an entity layout may override parts of a note (e.g. partnerships print no Secured / Unsecured tier)
+        notes_cfg = {k: {**v, **((self.layout.get("notes") or {}).get(k) or {})} if isinstance(v, dict) else v
+                     for k, v in self.map["notes"].items()}
+        # client wording, e.g. {"receivables": "Trade and Other Receivables"} (pair with options.bs_line_labels)
+        for k, title in (self.options.get("note_titles") or {}).items():
+            if isinstance(notes_cfg.get(k), dict):
+                notes_cfg[k] = {**notes_cfg[k], "title": title, "total": f"Total {title}"}
+        order = self.options.get("notes_order") or self.layout.get("notes_order") or self.map["notes_order"]
+        by_note: dict[str, list[dict]] = {k: [] for k in order}
         for a in self.accounts:
-            k = self._note_key_for(a["report_code"])
+            k = self._note_key_for(a["slot"])
             if k is None:
-                if a["report_code"].startswith(("ASS", "LIA")):
+                if a["slot"].startswith(("ASS", "LIA")):
                     self.validation.append({"level": "error", "check": "mapping",
-                                            "detail": f"Account '{a['name']}' report code {a['report_code']} is not a Balance Sheet line in report-map.json."})
+                                            "detail": f"Account '{a['name']}' report code {a['report_code']} (layout {a['slot']}) is not a Balance Sheet line in report-map.json."})
                 continue
             by_note.setdefault(k, []).append(a)
+        # a Reserves note when there are two or more reserve accounts (one reserve prints on the face only)
+        reserves = [a for a in self.accounts if a["slot"].startswith("EQU.RES")]
+        if len(reserves) >= 2 and self.options.get("reserves_note", True) and "reserves" in notes_cfg:
+            by_note["reserves"] = reserves
 
         notes: list[dict] = []
         number = 2
-        for key in self.map["notes_order"]:
+        for key in order:
             rows = by_note.get(key) or []
             if not any(rnd(r["cy"]) or rnd(r["py"]) for r in rows):
                 continue
@@ -423,11 +674,26 @@ class Pack:
         levels = cfg.get("levels", "flat")
         out: list[dict] = []
 
+        line_order = self.options.get("note_line_order") or self.options["sort"]
+
         def lines_for(rs: list[dict], indent: int) -> list[dict]:
-            rs = sorted(rs, key=lambda a: a["display_name"].lower()) if self.options["sort"] == "alpha" else rs
+            rs = sorted(rs, key=lambda a: a["display_name"].lower()) if line_order == "alpha" else sorted(rs, key=lambda a: a["_seq"])
             # cost lines before their accumulated depreciation, Xero style
             rs = sorted(rs, key=lambda a: 1 if re.search(r"accum|amortis|deprec", a["display_name"].lower()) else 0) if key in ("ppe", "intangibles") else rs
             return [{"kind": "line", "label": a["display_name"], "cy": a["cy"], "py": a["py"], "indent": indent} for a in rs]
+
+        def ppe_class_lines(label: str, cls: str, rs: list[dict], indent: int) -> list[dict]:
+            """Xero prints a PPE class as '<Class> at Cost' and 'Accumulated Depreciation of <Class>'."""
+            if cls == "OTH" or (self.options.get("ppe_note_lines") or cfg.get("line_style")) != "class":
+                return lines_for(rs, indent)
+            acc = [a for a in rs if ACCUM_RE.search(a["name"])]
+            cost = [a for a in rs if a not in acc]
+            out_ = []
+            for lab, grp in ((f"{label} at Cost", cost), (f"Accumulated Depreciation of {label}", acc)):
+                tot = self._sum(grp)
+                if grp and (rnd(tot["cy"]) or rnd(tot["py"])):
+                    out_.append({"kind": "line", "label": lab, "indent": indent, **tot})
+            return out_
 
         if levels == "flat":
             out += lines_for(rows, 1)
@@ -437,15 +703,16 @@ class Pack:
             groups: OrderedDict[str, list[dict]] = OrderedDict()
             for label in cfg["classes"].values():
                 groups[label] = []
+            code_of = {v: k for k, v in cfg["classes"].items()}
             for a in rows:
-                s = segs(a["report_code"])
+                s = segs(a["slot"])
                 cls = s[3] if len(s) > 3 and s[3] in cfg["classes"] else cfg.get("default_class")
                 groups[cfg["classes"][cls]].append(a)
             for label, rs in groups.items():
                 if not rs:
                     continue
                 out.append({"kind": "heading", "label": label, "indent": 1})
-                out += lines_for(rs, 2)
+                out += ppe_class_lines(label, code_of[label], rs, 2) if key == "ppe" else lines_for(rs, 2)
                 st = self._sum(rs)
                 out.append({"kind": "total", "label": f"Total {label}", "indent": 2, **st})
             return out
@@ -455,14 +722,14 @@ class Pack:
                 out += lines_for(rows, 1)
                 return out
             for seg, label in (("CUR", cfg["cur_label"]), ("NCA", cfg["ncu_label"])):
-                rs = [a for a in rows if segs(a["report_code"])[1] == seg]
+                rs = [a for a in rows if segs(a["slot"])[1] == seg]
                 if not rs:
                     continue
                 out.append({"kind": "heading", "label": label, "indent": 1})
                 l2 = cfg.get("level2") or {}
                 sub: OrderedDict[str, list[dict]] = OrderedDict()
                 for a in rs:
-                    s = segs(a["report_code"])
+                    s = segs(a["slot"])
                     sub.setdefault(l2.get(s[3]) if len(s) > 3 else None, []).append(a)
                 for l2label, l2rows in sub.items():
                     if l2label:
@@ -478,7 +745,7 @@ class Pack:
             order = cfg["subgroup_order"]
             groups: OrderedDict[str, list[dict]] = OrderedDict((k, []) for k in order)
             for a in rows:
-                code = a["report_code"]
+                code = a["slot"]
                 match = None
                 for k in sorted(order, key=len, reverse=True):  # longest prefix first
                     if code == k or code.startswith(k + "."):
@@ -505,16 +772,19 @@ class Pack:
         def lines(prefix: str) -> list[dict]:
             groups: OrderedDict[str, list[dict]] = OrderedDict()
             for a in self.accounts:
-                s = segs(a["report_code"])
+                s = segs(a["slot"])
                 if len(s) >= 3 and ".".join(s[:2]) == prefix:
-                    k = self._bs_line_key(a["report_code"])
+                    k = self._bs_line_key(a["slot"])
                     if k:
                         groups.setdefault(k, []).append(a)
             # keep report-map order
             ordered = [k for k in self.map["bs_lines"] if k in groups]
             out = []
+            relabel = self.options.get("bs_line_labels") or {}
             for k in ordered:
-                info = self.map["bs_lines"][k]
+                info = dict(self.map["bs_lines"][k])
+                if k in relabel or ".".join(segs(k)[:3]) in relabel:
+                    info["label"] = relabel.get(k) or relabel[".".join(segs(k)[:3])]
                 tot = self._sum(groups[k])
                 if rnd(tot["cy"]) == 0 and rnd(tot["py"]) == 0:
                     continue
@@ -537,12 +807,18 @@ class Pack:
 
         eq = self.equity_lines
         equity_rows = []
-        for key, lab in (("retained_display", "Retained Earnings"), ("reserves", "Reserves"),
-                         ("share_capital", "Share Capital"), ("capital", "Capital Accounts"),
-                         ("drawings", "Drawings"), ("other", "Other Equity")):
+        slot_of = {"share_capital": "EQU.SHA", "reserves": "EQU.RES", "capital": "EQU.CAP", "drawings": "EQU.DRA",
+                   "other": "EQU.OTH", "settled": "EQU.SET", "profit_share": "EQU.PFT"}
+        for spec in self.layout.get("bs_equity") or DEFAULT_BS_EQUITY:
+            key, lab = spec["value"], spec["label"]
+            if lab == "@accounts" and key in slot_of:
+                for a in sorted(self._accts(slot_of[key]), key=lambda a: a["_seq"]):
+                    equity_rows.append({"label": a["display_name"], "note": "", "cy": a["cy"], "py": a["py"]})
+                continue
             v = eq[key]
-            if rnd(v["cy"]) or rnd(v["py"]) or key == "retained_display":
-                equity_rows.append({"label": lab, "note": "", **v})
+            if rnd(v["cy"]) or rnd(v["py"]) or spec.get("always"):
+                nref = str(note_no["reserves"]) if key == "reserves" and "reserves" in note_no else ""
+                equity_rows.append({"label": lab, "note": nref, **v})
         te = {c: sum(x[c] for x in equity_rows) for c in ("cy", "py")}
         return {
             "assets": {"current": assets_cur, "non_current": assets_ncu, "total": ta},
@@ -554,17 +830,22 @@ class Pack:
     def _build_equity_statement(self) -> dict:
         eq = self.equity_lines
         te = self.bs["equity"]["total"]
-        profit = self.pnl["totals"]["npat_div"]
-        moves: list[dict] = [{"label": self.map["equity_statement"]["profit"], "cy": profit["cy"], "py": profit["py"]}]
+        profit = self.pnl["totals"]["retained_profit"]
+        es = dict(self.map["equity_statement"])
+        es.update(self.layout.get("equity_statement") or {})
+        self.equity_labels = es
+        moves: list[dict] = [{"label": es["profit"], "cy": profit["cy"], "py": profit["py"]}]
         # movements derived from the balance sheet (CY only - PY needs prior-prior data)
-        for key, label in (("share_capital", "Share Capital"), ("reserves", "Reserves"),
+        labels = es.get("movement_labels") or {}
+        for key, label in (("share_capital", "Share Capital"), ("reserves", "Reserves"), ("settled", "Settled Sum"),
                            ("capital", "Capital Accounts"), ("drawings", "Drawings"), ("other", "Other Equity")):
             delta = eq[key]["cy"] - eq[key]["py"]
             if rnd(delta):
-                names = [a["display_name"] for a in self._accts("EQU." + {"share_capital": "SHA", "reserves": "RES", "capital": "CAP", "drawings": "DRA", "other": "OTH"}[key])]
-                moves.append({"label": names[0] if len(names) == 1 and key in ("reserves", "other") else label, "cy": delta, "py": 0, "derived": True})
+                names = [a["display_name"] for a in self._accts("EQU." + {"share_capital": "SHA", "reserves": "RES", "capital": "CAP", "drawings": "DRA", "other": "OTH", "settled": "SET"}[key])]
+                moves.append({"label": labels.get(key) or (names[0] if len(names) == 1 and key in ("reserves", "other", "settled") else label),
+                              "cy": delta, "py": 0, "derived": True})
         # retained earnings roll-forward residual (direct postings to RE)
-        expected_ret_cy = eq["retained_prior"]["py"] + eq["cye"]["py"] - eq["dividends"]["py"]
+        expected_ret_cy = eq["retained_prior"]["py"] + eq["cye"]["py"] - eq["dividends_bs"]["py"]
         residual = eq["retained_prior"]["cy"] - expected_ret_cy
         if 0.5 < abs(residual) <= ROUNDING_TOL:
             self.validation.append({"level": "info", "check": "retained_earnings_rollforward",
@@ -582,7 +863,7 @@ class Pack:
                     ex["cy"] = rnd(m["cy"])
             else:
                 moves.append({"label": m["label"], "cy": rnd(m.get("cy", 0)), "py": rnd(m.get("py", 0))})
-        moves = [m for m in moves if rnd(m["cy"]) or rnd(m["py"]) or m["label"] == self.map["equity_statement"]["profit"]]
+        moves = [m for m in moves if rnd(m["cy"]) or rnd(m["py"]) or m["label"] == es["profit"]]
         total_inc = {c: sum(m[c] for m in moves) for c in ("cy", "py")}
         opening = {"cy": te["py"], "py": te["py"] - total_inc["py"]}
         if "opening_py" in self.src.get("equity", {}):
@@ -640,7 +921,8 @@ class Pack:
                           "detail": f"{c.upper()}: Net Assets and Total Equity differ by {fmt(na - te)} - within rounding tolerance for whole-dollar source figures (Xero shows the same small footing differences)."})
         # PY comparatives present?
         if all(rnd(a["py"]) == 0 for a in self.accounts):
-            v.append({"level": "warning", "check": "comparatives", "detail": "No prior-year figures found - the pack will print '-' in the comparative column."})
+            v.append({"level": "warning", "check": "comparatives",
+                      "detail": "No prior-year figures found - the pack prints a single current-year column (Xero's first-year layout). If this is not the entity's first year, add the comparatives from last year's pack."})
         # depreciation ties
         if self.depn:
             pl_depn = sum(l["cy"] for s in self.pnl["sections"] if not s.get("computed") for l in s["lines"]
@@ -663,11 +945,34 @@ class Pack:
         if tax_exp and not tax_liab:
             v.append({"level": "info", "check": "income_tax", "detail": "Income tax expense is booked but no Income Tax Payable / Provision account was found on the Balance Sheet."})
         # entity fields
-        for f_ in ("name", "abn", "fy_end"):
+        for f_ in ("name", "fy_end"):
             if not self.entity.get(f_):
                 v.append({"level": "error", "check": "entity", "detail": f"entity.{f_} is missing."})
-        if not self.entity.get("directors"):
-            v.append({"level": "warning", "check": "entity", "detail": "No directors listed - the Directors Declaration will have no signature blocks."})
+        if not self.entity.get("abn"):
+            v.append({"level": "warning", "check": "entity",
+                      "detail": "No ABN supplied - the cover prints no ABN line (correct only if the entity has no ABN)."})
+        if "declaration" in self.reports() and not self.entity.get("directors"):
+            who = {"trust": "directors of the trustee company / trustees", "partnership": "partners",
+                   "sole_trader": "proprietor"}.get(self.etype, "directors")
+            v.append({"level": "warning", "check": "entity", "detail": f"No signatories listed ({who}) - the declaration will have no signature blocks."})
+        # Division 7A loans
+        d7a = [a["name"] for a in self.accounts if re.search(r"div(ision)?\.?\s*7a", a["name"], re.I)]
+        if d7a and self.etype == "company":
+            v.append({"level": "info", "check": "division_7a",
+                      "detail": f"Division 7A loan(s) on the Balance Sheet: {', '.join(d7a)}. Confirm a complying loan agreement and the minimum yearly repayment."})
+        # distributions credited to partners / beneficiaries
+        dist = self.pnl["totals"]["distributions"]
+        if self.persons and (rnd(dist["cy"]) or rnd(dist["py"])):
+            share = self.equity_lines["profit_share"]
+            for c in ("cy", "py"):
+                if abs(share[c] - dist[c]) > ROUNDING_TOL and rnd(share[c]):
+                    v.append({"level": "warning", "check": "distribution_ties",
+                              "detail": f"{c.upper()}: distributions in the P&L {fmt(dist[c])} vs share of profits credited to {self.persons['title'].lower()} {fmt(share[c])}."})
+        if self.etype == "partnership":
+            und = self.pnl["totals"].get("undistributed") or self.pnl["totals"]["retained_profit"]
+            if rnd(und["cy"]):
+                v.append({"level": "warning", "check": "undistributed_income",
+                          "detail": f"Undistributed Income {fmt(und['cy'])} - a partnership's net income is normally fully distributed to the partners."})
 
     # ---- output --------------------------------------------------------- #
     def has_errors(self) -> bool:
@@ -688,8 +993,9 @@ class Pack:
         return {
             "entity": self.entity.get("name"),
             "fy_end": self.entity.get("fy_end"),
+            "type": self.etype, "reports": self.reports(),
             "total_income": t["total_income"], "expenses": t["expenses"], "npat": t["npat"],
-            "dividends": t["dividends"], "npat_after_div": t["npat_div"],
+            "dividends": t["dividends"], "npat_after_div": t["npat_div"], "distributions": t["distributions"],
             "total_assets": self.bs["assets"]["total"], "total_liabilities": self.bs["liabilities"]["total"],
             "net_assets": self.bs["net_assets"], "total_equity": self.bs["equity"]["total"],
             "notes": [(n["number"], n["title"]) for n in self.notes],

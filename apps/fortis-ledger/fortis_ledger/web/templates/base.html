@@ -1,0 +1,139 @@
+{% import "_macros.html" as m with context %}<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %}{% if client %} - {{ client.name }}{% endif %} | {{ APP_NAME }}</title>
+  <link rel="icon" href="{{ url_for('static', filename='icon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ VERSION }}">
+  <script src="{{ url_for('static', filename='app.js') }}?v={{ VERSION }}" defer></script>
+</head>
+<body class="{% block body_class %}{% endblock %}" data-csrf="{{ csrf_token() }}"{% if client and not readonly %} data-heartbeat="{{ url_for('ui.lock_heartbeat', slug=client.slug) }}"{% endif %}{% if browser_mode %} data-alive="{{ url_for('ui.alive') }}"{% endif %}{% if pulse %} data-pulse="{{ pulse.url }}" data-pulse-since="{{ pulse.since }}" data-pulse-every="{{ pulse.every }}"{% if pulse.ro %} data-pulse-ro="1"{% endif %}{% endif %}>
+{% include "_icons.html" %}
+{% block shell %}
+<div class="shell">
+  <aside class="sidebar" aria-label="Main">
+    <a class="brand" href="{{ url_for('ui.clients') }}" title="Fortis Ledger - all clients">
+      <img src="{{ url_for('static', filename='fortis-logo.svg') }}" alt="Fortis Accounting Partners" class="logo">
+      <span class="app-name">Ledger</span>
+    </a>
+    {% if client %}
+    <a class="side-client" href="{{ url_for('ui.overview', slug=client.slug) }}" title="{{ client.name }}">
+      <span class="avatar">{{ m.initials(client.name) }}</span>
+      <span class="side-client-text"><strong>{{ client.name }}</strong><small>{{ client.type|entity }}{% if years %} · FY{{ fy }}{% endif %}</small></span>
+    </a>
+    <nav class="side-nav">
+      <div class="side-label">Ledger</div>
+      {{ m.nav("overview", url_for('ui.overview', slug=client.slug), "Overview", "home", nav_tab) }}
+      {{ m.nav("bank", url_for('ui.bank', slug=client.slug), "Bank", "bank", nav_tab) }}
+      {{ m.nav("journals", url_for('ui.journals', slug=client.slug), "Journals", "journal", nav_tab) }}
+      {{ m.nav("accounts", url_for('ui.accounts', slug=client.slug), "Chart of accounts", "accounts", nav_tab) }}
+      {{ m.nav("import", url_for('ui.import_start', slug=client.slug), "Import", "import", nav_tab) }}
+      <div class="side-label">Reports</div>
+      {{ m.nav("tb", url_for('ui.trial_balance', slug=client.slug), "Trial balance", "scale", nav_tab) }}
+      {{ m.nav("pl", url_for('ui.profit_and_loss', slug=client.slug), "Profit and loss", "chart", nav_tab) }}
+      {{ m.nav("bs", url_for('ui.balance_sheet', slug=client.slug), "Balance sheet", "layers", nav_tab) }}
+      {{ m.nav("gl", url_for('ui.account_transactions', slug=client.slug), "General ledger detail", "transactions", nav_tab) }}
+      {{ m.nav("gst", url_for('ui.gst_page', slug=client.slug), "GST report", "receipt", nav_tab) }}
+      {{ m.nav("reports", url_for('ui.reports_page', slug=client.slug), "All reports", "report", nav_tab) }}
+      <div class="side-label">Year</div>
+      {{ m.nav("year_end", url_for('ui.year_end', slug=client.slug), "Year end", "yearend", nav_tab) }}
+      {{ m.nav("changes", url_for('ui.change_log', slug=client.slug), "Change log", "history", nav_tab) }}
+      {{ m.nav("details", url_for('ui.client_details', slug=client.slug), "Client details", "building", nav_tab) }}
+    </nav>
+    {% else %}
+    <div class="side-empty">
+      <span class="feature-icon">{{ m.icon("building") }}</span>
+      <p><strong>No client open</strong>Pick a client from the list to see its journals, reports and year end.</p>
+    </div>
+    {% endif %}
+    <nav class="side-nav side-bottom">
+      {{ m.nav("clients", url_for('ui.clients'), "All clients", "users", nav_tab) }}
+      {{ m.nav("team", url_for('ui.team_page'), "Team", "team", nav_tab) }}
+      {{ m.nav("xero", url_for('ui.xero_home'), "Connect to Xero", "link", nav_tab) }}
+      {{ m.nav("settings", url_for('ui.setup'), "Settings", "settings", nav_tab) }}
+    </nav>
+  </aside>
+  <div class="main-col">
+    <header class="topbar">
+      <div class="crumbs">
+        {% if client %}
+          <a href="{{ url_for('ui.clients') }}">Clients</a>{{ m.icon("chevron", "ic crumb-sep") }}<a href="{{ url_for('ui.overview', slug=client.slug) }}" class="crumb-current">{{ client.name }}</a>
+        {% else %}
+          <span class="crumb-current">{{ self.title() }}</span>
+        {% endif %}
+      </div>
+      {% if client and years %}
+      <form class="fy-picker" method="get" action="">
+        <label for="fy-select">Financial year</label>
+        <select id="fy-select" name="fy" data-autosubmit>
+          {% for y in years|reverse %}<option value="{{ y }}"{% if y == fy %} selected{% endif %}>FY{{ y }}</option>{% endfor %}
+          {% if fy not in years %}<option value="{{ fy }}" selected>FY{{ fy }} (not started)</option>{% endif %}
+        </select>
+      </form>
+      {% endif %}
+      <span class="spacer"></span>
+      {% if browser_mode %}
+      <form method="post" action="{{ url_for('ui.quit') }}" class="inline-form" data-confirm="Close Fortis Ledger?">{{ m.csrf() }}<button class="btn ghost small">Quit</button></form>
+      {% endif %}
+      <details class="user-menu">
+        <summary title="{{ user_email or user_name }}"><span class="avatar">{{ user_initials }}</span>
+          <span class="user-text"><strong>{{ user_name or "Set your name" }}</strong>{% if user_email %}<small>{{ user_email }}</small>{% endif %}</span>
+          {{ m.icon("chevron", "ic chev") }}</summary>
+        <div class="menu" role="menu">
+          <a href="{{ url_for('ui.setup') }}" role="menuitem">{{ m.icon("settings") }} Settings</a>
+          {% if user_is_admin %}<a href="{{ url_for('ui.firm_settings') }}" role="menuitem">{{ m.icon("building") }} Firm settings</a>{% endif %}
+          <a href="{{ url_for('ui.team_page') }}" role="menuitem">{{ m.icon("team") }} Team</a>
+          <a href="{{ url_for('ui.updates_page') }}" role="menuitem">{{ m.icon("refresh") }} Updates</a>
+          {% if signed_in %}
+          <form method="post" action="{{ url_for('ui.signout') }}">{{ m.csrf() }}<button role="menuitem">{{ m.icon("logout") }} Sign out</button></form>
+          {% elif not signin_required %}
+          <span class="menu-note">Office sign-in is off - see Firm settings</span>
+          {% endif %}
+        </div>
+      </details>
+    </header>
+    {% if client %}
+    {% if readonly %}
+    <div class="banner warn" id="readonly-banner">
+      {{ m.icon("lock") }}<span><strong>Read only.</strong> {{ lock.user }} is working on this client on {{ lock.machine }} - you can look at everything but not change it.</span>
+      <form method="post" action="{{ url_for('ui.lock_take', slug=client.slug) }}" class="inline-form"
+            data-confirm="Only take over if {{ lock.user }} has finished: they will not be able to save any more changes. Take over?">
+        {{ m.csrf() }}<button class="btn small">Take over editing</button>
+      </form>
+    </div>
+    {% elif year_locked %}
+    <div class="banner info">{{ m.icon("lock") }}<span>FY{{ fy }} is locked (finalised). Unlock it at <a href="{{ url_for('ui.year_end', slug=client.slug, fy=fy) }}">Year end</a> to change anything in it.</span></div>
+    {% endif %}
+    <div class="banner warn hidden" id="lock-lost">Someone else has taken over editing this client. Reload the page - your changes can no longer be saved.</div>
+    {% endif %}
+    {% if pulse %}
+    <div class="banner info hidden" id="live-banner" role="status">{{ m.icon("refresh") }}<span id="live-text"></span>
+      <a class="btn small" id="live-refresh" href="">Refresh</a></div>
+    {% endif %}
+    {% if update_banner and request.endpoint != "ui.updates_page" %}
+    <div class="banner info" id="update-banner">{{ m.icon("refresh") }}
+      {% if update_banner.restart %}
+      <span>Fortis Ledger {{ update_banner.restart }} is installed - restart Fortis Ledger to start using it.</span>
+      {{ m.post_button(url_for('ui.updates_restart'), "Restart now", "btn small", confirm="Restart Fortis Ledger now? Anything not saved on this screen is lost.") }}
+      {% else %}
+      <span>Fortis Ledger {{ update_banner.available }} is available - an admin shared it with everyone.</span>
+      <a class="btn small" href="{{ url_for('ui.updates_page') }}">See the update</a>
+      {% endif %}
+    </div>
+    {% endif %}
+    <main class="page">
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in msgs %}<div class="flash {{ cat }}" role="status">{{ m.icon({"ok": "check", "error": "alert", "warn": "alert"}.get(cat, "info")) }}<span>{{ msg }}</span></div>{% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="foot">
+      <span>Data folder: {{ settings.data_folder or "not set" }}</span>
+      <a href="{{ url_for('ui.updates_page') }}" class="muted">Fortis Ledger {{ VERSION }}</a>
+    </footer>
+  </div>
+</div>
+{% endblock %}
+</body>
+</html>

@@ -22,7 +22,8 @@
      "0.688535 USD (United States Dollar)"
     ]
    }
-  ]
+  ],
+  "ppe_note_lines": "accounts"
  },
  "equity": {
   "opening_py": -4937

@@ -13,7 +13,8 @@
  "options": {
   "sort": "alpha",
   "cost_of_sales_label": "Cost of Goods Sold",
-  "show_current_heading": false
+  "show_current_heading": false,
+  "ppe_note_lines": "accounts"
  },
  "equity": {
   "opening_py": -8186

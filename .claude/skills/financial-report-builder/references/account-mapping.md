@@ -1,9 +1,17 @@
-# Account mapping reference
+# Account mapping reference - layout codes
 
-Every account gets **one report code**. The code decides where the account
-prints in each report of the pack. This file is the lookup; the machine copy is
-`assets/report-map.json` (labels, order) and the keyword rules in
-`scripts/fr_engine.py`.
+Two kinds of code are in play (see `references/charts-and-report-codes.md`):
+
+* the **Xero report code** on the firm's chart account (`LIA.CUR.PAY.EMP`,
+  `ASS.NCA.FIX.VEH.ACC`, `EQU.DRA.2` …), which is what a preparer changes; and
+* the **layout code** it resolves to through `report-map.json › xero_code_map`.
+  This file is about the layout code. It decides where an account prints in
+  each report of the pack.
+
+Layout codes are valid report codes too. `--set-code "Loan - Director=LIA.NCA.SHA"`
+uses one directly. The machine copy is `assets/report-map.json` (`pnl_sections`,
+`bs_lines`, `notes`, labels and order). The trust, partnership and sole-trader
+P&L sections are in `entity_layouts`.
 
 ## 1. Report code hierarchy
 
@@ -25,6 +33,10 @@ P&L section, 4 = class or sub-heading inside the Note.
 | *(computed)* | **Net Profit After Tax** | | |
 | `EQU.DIV` | **Dividend Paid** (hidden when nil) | Total Dividend Paid | Fully Franked Dividends Paid, Unfranked Dividends Paid |
 | *(computed)* | **Net Profit After Tax & Dividend** | | = "Profit for the Period" in Movements in Equity |
+| `EXP.DIS` | **Distribution of Trust Income** › "Trust Income Distributed" (trust) / **Net Income Distributed** › "Distribution of Net Income" (partnership) | Total … | Distribution to Beneficiaries / Partner n; per-person distribution accounts are summed into the one line |
+| `EXP.CFL` | trust distribution section (losses applied before distribution) | | Carry Forward Losses Applied |
+| `EXP.DIS.ADJ` | distribution section, "Reconciliation Adjustment" line | | Reconciliation Adjustments (Happy Inn) |
+| *(computed)* | **Profit/(Loss) Before Distribution**, **Undistributed Income** (trust, partnership); **Net Profit/(Loss)** (sole trader) | | see `references/entity-types.md` |
 
 ### Balance Sheet + Notes
 
@@ -68,44 +80,43 @@ P&L section, 4 = class or sub-heading inside the Note.
 | `EQU.RET` | Equity | Retained Earnings (combined with CYE and DIV) | - | - |
 | `EQU.CYE` | Equity | *(folded into Retained Earnings)* | - | must equal NPAT |
 | `EQU.DIV` | Equity | *(folded into Retained Earnings; printed in the P&L)* | - | - |
-| `EQU.DRA` / `EQU.CAP` / `EQU.OTH` | Equity | Drawings / Capital Accounts / Other Equity | - | non-company entities |
+| `EQU.DRA` / `EQU.CAP` / `EQU.OTH` | Equity | Drawings / Capital Accounts / Other Equity | - | non-company entities; a `.n` suffix is the partner / beneficiary number |
+| `EQU.PFT` | Equity | Share of profits (per person) | - | Partner / Beneficiary Accounts statement |
+| `EQU.SET` | Equity | Settlement capital / Unit capital (printed by account name) | - | trusts |
+| `LIA.NCA.BEN` | Non-Current Liabilities | Beneficiary Entitlements | Beneficiary Entitlements | optional: unpaid entitlements on their own line (the packs use `LIA.NCA.FIN.UNS`) |
+| `EQU.RES` (two or more accounts) | Equity | Reserves | **Reserves** | flat list (trust packs) |
 
-## 2. Xero account type → default code
+## 2. Section defaults
 
-Used when an account is not in the chart and no keyword rule fires.
-`build_pack.py` reads the type from the **section header** the line sits under
-in a Xero export (Trading Income, Cost of Sales, Other Income, Operating
-Expenses; Bank, Current Assets, Inventory, Fixed Assets, Non-current Assets,
-Current Liabilities, Non-current Liabilities, Equity).
+When neither the chart nor a keyword rule places a line, the section header it
+sits under decides, and the line is flagged **REVIEW**:
 
-| Xero type | Default report code |
-|---|---|
-| Revenue / Sales | `REV.TRA` |
-| Other Income | `REV.OTH` |
-| Direct Costs | `EXP.COS` |
-| Expense / Overheads / Depreciation | `EXP.OPE` |
-| Bank | `ASS.CUR.CAS.BAN` |
-| Current Asset | `ASS.CUR.REC` |
-| Inventory | `ASS.CUR.INV.INV` |
-| Prepayment | `ASS.CUR.PRE` |
-| Fixed Asset | `ASS.NCA.PPE.PLA` |
-| Non-current Asset | `ASS.NCA.OTH` |
-| Current Liability / Liability | `LIA.CUR.PAY` |
-| Non-current Liability | `LIA.NCA.FIN.UNS` |
-| Equity | `EQU.OTH` |
+| Workpaper section | Default Xero code | Prints as |
+|---|---|---|
+| Trading Income / Income / Sales | `REV.TRA` | Income |
+| Other Income | `REV.OTH` | Other Income |
+| Cost of Sales / Direct Costs | `EXP.COS` | Cost of Sales |
+| Operating Expenses / Expenses | `EXP.OPR` | Expenses |
+| Bank | `ASS.CUR.CAS.BAN` | Cash › Bank Accounts |
+| Current Assets | `ASS.CUR.REC` | Receivables › Current |
+| Fixed Assets | `ASS.NCA.FIX.PLA` | PPE › Plant and Equipment |
+| Non-current Assets | `ASS.NCA.REC` | Receivables › Non Current |
+| Current Liabilities | `LIA.CUR.PAY.TRA` | Payables › Current |
+| Non-current Liabilities | `LIA.NCL.LOA.UNS` | Financial Liabilities › Non Current › Unsecured |
+| Equity | `EQU` | Other Equity |
 
-A type-default mapping prints as **REVIEW** in the mapping table - confirm or
-override it before rendering.
+A P&L line with no section is income when its name says received / income /
+revenue / earned / sales, otherwise an expense.
 
 ## 3. Where does this account go? (decision rules)
 
 | Account (as it appears in the workpaper) | Code | Why / when to choose differently |
 |---|---|---|
 | GST (credit) | `LIA.CUR.TAX` | Tax liabilities inside the Payables note. |
-| GST (debit / refund due) | `LIA.CUR.TAX` | Xero prints it as a negative liability (Wisdom, Complex, Frontier). Capstone reclassified "GST payments/refunds" to `ASS.CUR.REC` - only do that if the preparer asks. |
+| GST (debit / refund due) | `LIA.CUR.TAX` | Xero prints it as a negative liability (Wisdom, Complex, Frontier). Capstone reclassified "GST payments/refunds" to `ASS.CUR.REC` - only do that if the preparer asks. Sole traders: Receivables automatically (True Talkers). |
 | PAYG Withholding Payable, PAYG Instalment Payable, Income Tax Payable, Provision for Income Tax (credit) | `LIA.CUR.TAX` | |
 | Provision for income tax in **debit** (refund) | `LIA.CUR.TAX` (negative) or `ASS.CUR.REC` | Capstone shows it in Receivables. Follow the prior-year pack for the client. |
-| ATO Integrated Client Account | `LIA.CUR.PAY` when a liability (Padel, Frontier), `ASS.CUR.REC` when in credit (Capstone) | Not a tax liability sub-group in any of the five packs. |
+| ATO Integrated Client Account / running balance account, SGC account | `LIA.CUR.TAX` (firm chart "Tax liabilities") | The FY2026 Xero packs (IHDC) print them under Taxation. The five older fixtures pin `LIA.CUR.PAY` (Padel, Frontier) or `ASS.CUR.REC` (Capstone) - follow the client's prior pack. |
 | Superannuation Payable, Wages Payable, payroll clearing | `LIA.CUR.EMP` | Personnel-related items. |
 | Provision for holiday pay / annual leave / bonuses / rent / make-good | `LIA.CUR.PRO` | Long service leave → `LIA.NCA.PRO`. |
 | Credit cards (AMEX, Mastercard) in credit | `LIA.CUR.PAY` | Frontier. If the card is in debit and set up as a Bank account, `ASS.CUR.CAS.BAN` (Wisdom's Mastercard***0401). |
@@ -141,33 +152,41 @@ override it before rendering.
 
 ## 4. Keyword rules (summary)
 
-`fr_engine.KEYWORD_RULES` is scanned top to bottom; the first pattern that
-matches the account name and is compatible with the statement side wins. The
-important ones, in priority order: cash on hand → term deposit → bank/card names
-→ receivables/loans receivable → prepayments → inventory → PPE classes
-(leasehold, land, motor, furniture, office, computer, LVP, plant) → intangibles
-→ investments → GST / PAYG / income tax / ATO accounts → super & payroll
-liabilities → provisions → payables & clearing accounts → HP/secured finance →
-loans (default non-current unsecured) → equity (dividends, CYE, RE, share
-capital, reserves, drawings, capital accounts) → other income (interest,
-dividends received, rent, FBT contribution, gains, grants/refunds/overrides) →
-trading income (sales, revenue, fees, income, commission, consulting, services)
-→ cost of sales (stock, purchases, direct costs, subcontractors) → income tax.
+`chart.py › RULES` is scanned top to bottom for the line's section. The first
+pattern that matches the (normalised) name wins and gives a Xero report-code
+family; the most similar chart account in that family is the posting. The
+important ones, in priority order:
 
-Rules never move an account across statements: a P&L line can only become
-`REV.*`, `EXP.*` or `EQU.DIV`; a Balance Sheet line only `ASS.*`, `LIA.*`,
-`EQU.*`. The account type also pins current vs non-current where it says so.
+* **Assets:** cash on hand → term deposits → card and bank names → doubtful
+  debts → prepayments → WIP / inventory → GST / ATO / withholding refunds →
+  debtors → loans receivable → deposits and bonds → owner accounts → goodwill →
+  leasehold, land, buildings, vehicles, pools, plant (PPE classes) → intangibles
+  → investments → suspense.
+* **Liabilities:** unexpired HP interest → chattel mortgage → hire purchase and
+  vehicle finance → GST → PAYG / income tax / ATO / SGC → parental leave and
+  super → owner accounts (REVIEW) → wages → leave and entitlements → dividends
+  and provisions → beneficiary entitlements and loans → director / shareholder /
+  partner loans → (trusts) loans from persons → related-party loans →
+  mortgages, cards, bank loans → other loans → payables and accruals →
+  suspense.
+* **Equity:** dividends → current year earnings → retained earnings → share
+  capital → reserves → settled sum / units → drawings → share of profits →
+  capital / funds introduced / opening balances.
+* **P&L:** interest, dividends and distributions received, rent, grants, gains
+  on disposal, currency gains, FBT contributions, other income; trading income
+  (under a trading header only); opening / closing stock, cost of sales; income
+  tax, dividends paid, distributions, losses applied, losses on disposal,
+  currency losses, amortisation, depreciation, interest, super, wages, motor
+  vehicle, travel, insurance, rent, repairs, administration, advertising and
+  other expense families.
 
-## 5. Other entity types (stubs until the templates are uploaded)
+Rules never move a line across statements. A P&L line can only become `REV.*`,
+`EXP.*` or a dividend / distribution code; a Balance Sheet line only `ASS.*`,
+`LIA.*` or `EQU.*`. Current and non-current follow the workpaper section. The
+entity-specific rules are listed in `references/charts-and-report-codes.md § 2`.
 
-| Entity | Differences the mapping must support |
-|---|---|
-| **Trust** | No Share Capital / dividends. Equity = Settled sum (`EQU.CAP`), Trust capital reserves (`EQU.RES`), Undistributed income (`EQU.RET`); distributions to beneficiaries replace dividends (add `EQU.DIS` to `pnl_sections` as "Distribution to Beneficiaries"); beneficiary loan / UPE accounts → `LIA.CUR.PAY` or `ASS.CUR.REC`; Declaration becomes a Trustee Declaration (stub in `boilerplate.json`). |
-| **Partnership** | Partners' capital and current accounts (`EQU.CAP`, `EQU.DRA`); profit distributed to partners; "Statement of Distribution" report. |
-| **Sole trader** | Owner's capital, drawings (`EQU.DRA`), funds introduced (`EQU.CAP`); no income tax expense. |
-| **SMSF** | Different pack entirely (Operating Statement, Statement of Financial Position, member statements) - out of scope; use `smsf-audit-pack`. |
+## 5. Other entity types
 
-To add an entity type: drop the chart in `assets/chart-of-accounts/<type>.csv`,
-add the declaration wording under `boilerplate.json › declaration.<type>`, and
-extend `report-map.json` (`pnl_sections`, `bs_lines`) if new lines are needed.
-Set `entity.type` in the pack to pick them up.
+Trusts, partnerships and sole traders are fully supported. Their P&L
+sections, equity lines, partner and beneficiary statements and wording are in
+`references/entity-types.md`. SMSFs are out of scope (`smsf-audit-pack`).

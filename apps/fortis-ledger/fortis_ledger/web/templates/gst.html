@@ -1,0 +1,71 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}GST report{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>GST report</h1><p class="muted">{{ data.period }} · {{ data.basis_label }}</p></div>
+  <form method="post" action="{{ url_for('ui.report_generate', slug=client.slug) }}" class="actions">
+    {{ m.csrf() }}{{ m.fy_field() }}<input type="hidden" name="report" value="gst_report"><input type="hidden" name="open" value="yes">
+    <input type="hidden" name="start" value="{{ start|dmy }}"><input type="hidden" name="end" value="{{ end|dmy }}">
+    <input type="hidden" name="basis" value="{{ basis }}">
+    <button class="btn" name="format" value="pdf"{% if readonly %} disabled{% endif %}>PDF</button>
+    <button class="btn" name="format" value="xlsx"{% if readonly %} disabled{% endif %}>Excel</button>
+  </form>
+</div>
+<form method="get" class="toolbar">
+  {{ m.fy_field() }}
+  <label for="start">From</label><input id="start" name="start" value="{{ start|dmy }}" class="date">
+  <label for="end">To</label><input id="end" name="end" value="{{ end|dmy }}" class="date">
+  <div class="segmented" role="group" aria-label="Basis">
+    {% for k, label in bases.items() %}<a href="{{ url_for('ui.gst_page', slug=client.slug, fy=fy, start=start|dmy, end=end|dmy, basis=k) }}"{% if basis == k %} class="active"{% endif %}>{{ label }}</a>{% endfor %}
+  </div>
+  <input type="hidden" name="basis" value="{{ basis }}">
+  <button class="btn">Show</button>
+</form>
+{% if not data.registered %}<div class="flash warn">{{ m.icon("alert") }}<span>{{ client.name }} is not marked as registered for GST - tick it on <a href="{{ url_for('ui.client_details', slug=client.slug) }}">Client details</a> to code GST on bank lines and journals.</span></div>{% endif %}
+
+<div class="cards two">
+  <div class="card">
+    <h2>BAS summary</h2>
+    <table class="grid compact">
+      <tbody>
+      {% for k, label, v in data.labels %}
+      <tr><td class="nowrap"><strong>{{ k }}</strong></td><td>{{ label }}</td><td class="num">{{ v|money0 }}</td></tr>
+      {% endfor %}
+      </tbody>
+      <tfoot><tr class="total"><td></td><td>{{ "GST payable" if data.net_gst >= 0 else "GST refundable" }} (1A less 1B)</td>
+        <td class="num">{{ (data.net_gst if data.net_gst >= 0 else -data.net_gst)|money0 }}</td></tr></tfoot>
+    </table>
+  </div>
+  <div class="card">
+    <h2>By tax rate</h2>
+    <table class="grid compact">
+      <thead><tr><th>Tax rate</th><th class="num">Net</th><th class="num">GST</th><th class="num">Gross</th></tr></thead>
+      <tbody>
+      {% for r in data.rates %}
+      <tr><td>{{ r.tax }} <span class="muted small">{{ r.side }}</span></td><td class="num">{{ r.net|money0 }}</td>
+        <td class="num">{{ r.gst|money0 }}</td><td class="num">{{ r.gross|money0 }}</td></tr>
+      {% else %}
+      <tr><td colspan="4" class="empty">No transactions with GST in this period.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% for n in notes %}<p class="help">{{ n }}</p>{% endfor %}
+  </div>
+</div>
+
+<h2>Transactions</h2>
+<table class="grid compact">
+  <thead><tr><th>Date</th><th>Number</th><th>Account</th><th>Description</th><th>Tax rate</th><th class="num">Net</th><th class="num">GST</th><th class="num">Gross</th></tr></thead>
+  <tbody>
+  {% for x in data.lines %}
+  <tr><td class="nowrap">{{ x.date|dmy }}</td>
+    <td class="nowrap"><a href="{{ url_for('ui.journal_view', slug=client.slug, jfy=x.fy, number=x.number) }}">{{ x.number }}</a></td>
+    <td>{{ x.account }} {{ x.account_name }}</td><td>{{ x.text }}</td><td class="small nowrap">{{ x.tax }}</td>
+    <td class="num">{{ x.net|money0 }}</td><td class="num">{{ x.gst|money0 }}</td><td class="num">{{ x.gross|money0 }}</td></tr>
+  {% else %}
+  <tr><td colspan="8" class="empty">No transactions with GST in this period.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="help">Sales and purchases both show as positive amounts; refunds and credits show in brackets. The BAS itself is lodged in whole dollars.</p>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}Change log{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Change log</h1><p class="muted">Every change to this client: who, when, on which PC. SharePoint also keeps each file's version history.</p></div>
+</div>
+<form method="get" class="toolbar">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search, e.g. a journal number, account or name" aria-label="Search the change log">
+  <button class="btn">Search</button>
+  {% if q %}<a class="btn link" href="{{ url_for('ui.change_log', slug=client.slug) }}">Clear</a>{% endif %}
+  <span class="muted small">{{ total }} entr{{ "y" if total == 1 else "ies" }}{% if total > rows|length %}, newest {{ rows|length }} shown{% endif %}</span>
+</form>
+<table class="grid compact">
+  <thead><tr><th>When</th><th>Who</th><th>PC</th><th>What</th><th>Detail</th></tr></thead>
+  <tbody>
+  {% for a in rows %}
+  <tr><td class="nowrap">{{ a.at|when }}</td><td class="nowrap">{{ a.user }}{% if a.via %} <span class="badge info">via {{ a.via }}</span>{% endif %}</td><td class="nowrap muted">{{ a.machine }}</td>
+    <td class="nowrap"><code>{{ a.action }}</code></td><td>{{ a|audit_text }}</td></tr>
+  {% else %}
+  <tr><td colspan="5" class="empty">Nothing found.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

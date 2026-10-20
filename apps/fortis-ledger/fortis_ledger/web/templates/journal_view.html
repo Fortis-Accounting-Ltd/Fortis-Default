@@ -1,0 +1,79 @@
+{% extends "base.html" %}{% import "_macros.html" as m with context %}
+{% block title %}{{ j.number }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ j.number }} {{ m.status_badge(j) }}</h1>
+    <p class="muted">{{ m.kind_label(j.kind) }} journal · FY{{ jfy }}</p>
+  </div>
+  <div class="actions">
+    {% if editable and j.status == "posted" %}<a class="btn" href="{{ url_for('ui.journal_view', slug=client.slug, jfy=jfy, number=j.number, edit=1) }}">Edit</a>{% endif %}
+    {% if j.kind == "bank" %}
+    <a class="btn" href="{{ url_for('ui.bank_account', slug=client.slug, code=j.source.get('bank'), tab='done', q=j.number) }}">{{ m.icon("bank") }} Bank statement line</a>
+    <a class="btn link" href="{{ url_for('ui.journals', slug=client.slug, fy=jfy, kind='bank') }}">All bank transactions</a>
+    {% else %}
+    {% if not readonly and started %}<a class="btn" href="{{ url_for('ui.journal_new', slug=client.slug, fy=fy, copy=jfy ~ '/' ~ j.number) }}">Copy</a>{% endif %}
+    <a class="btn link" href="{{ url_for('ui.journals', slug=client.slug, fy=jfy) }}">All journals</a>
+    {% endif %}
+  </div>
+</div>
+<div class="panel">
+  <dl class="facts">
+    <dt>Date</dt><dd>{{ j.date|dmy }}</dd>
+    <dt>Narration</dt><dd>{{ j.narration }}</dd>
+    {% if j.reference %}<dt>Reference</dt><dd>{{ j.reference }}</dd>{% endif %}
+    {% if j.kind == "bank" %}<dt>Bank account</dt><dd>{{ j.source.get("bank") }} {{ accounts[j.source.get("bank")].name if accounts.get(j.source.get("bank")) else "" }}</dd>{% endif %}
+    {% if j.amounts == "exclusive" %}<dt>Amounts</dt><dd>GST exclusive</dd>{% endif %}
+    {% if j.source.get("file") %}<dt>From</dt><dd>{{ j.source.get("file") }}</dd>{% endif %}
+    {% if j.created %}<dt>Created</dt><dd>{{ j.created.get("at")|when }} by {{ j.created.get("by") }}{% if j.created.get("via") %} <span class="badge info">via {{ j.created.get("via") }}</span>{% endif %}</dd>{% endif %}
+    {% if j.updated %}<dt>Changed</dt><dd>{{ j.updated.get("at")|when }} by {{ j.updated.get("by") }}{% if j.updated.get("via") %} <span class="badge info">via {{ j.updated.get("via") }}</span>{% endif %}</dd>{% endif %}
+    {% if j.voided %}<dt>Voided</dt><dd>{{ j.voided.get("at")|when }} by {{ j.voided.get("by") }} - {{ j.voided.get("reason") }}</dd>{% endif %}
+    {% if j.reverses %}<dt>Reverses</dt><dd>{{ j.reverses }}</dd>{% endif %}
+    {% if j.reversed_by %}<dt>Reversed by</dt><dd>{{ j.reversed_by }}</dd>{% endif %}
+  </dl>
+  <table class="grid">
+    <thead><tr><th>Account</th><th>Description</th>{% if has_tax %}<th>Tax rate</th>{% endif %}<th class="num">Debit</th><th class="num">Credit</th></tr></thead>
+    <tbody>
+    {% for ln in j.lines %}
+    {% set a = accounts.get(ln.account) %}
+    <tr{% if ln.auto %} class="muted"{% endif %}><td><a href="{{ url_for('ui.account_transactions', slug=client.slug, fy=jfy, code=ln.account) }}">{{ ln.account }}</a> {{ a.name if a else "(not in the chart)" }}</td>
+      <td>{{ ln.description }}</td>
+      {% if has_tax %}<td class="small">{% if ln.auto %}GST{% else %}{{ ln.tax }}{% if ln.gst %} <span class="muted">(GST {{ ln.gst|money }})</span>{% endif %}{% endif %}</td>{% endif %}
+      <td class="num">{{ ln.debit|money }}</td><td class="num">{{ ln.credit|money }}</td></tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr class="total"><td></td><td class="right">Total</td>{% if has_tax %}<td></td>{% endif %}<td class="num">{{ j.total_debit|money0 }}</td><td class="num">{{ j.total_credit|money0 }}</td></tr></tfoot>
+  </table>
+  {% if j.kind == "bank" %}
+  <p class="help">A bank transaction from cash coding. To change it, unreconcile the statement line on the Bank page and code it again.</p>
+  {% endif %}
+  {% if j.kind in ("import", "close") and j.status == "posted" %}
+  <p class="help">{% if j.kind == "close" %}Made by the year-end close - it is refreshed from Year end when the year's balances change.{% else %}Made by an import - import the file again to replace it.{% endif %}</p>
+  {% endif %}
+</div>
+
+{% if not readonly and j.status == "posted" and j.kind != "bank" and not L.is_locked(jfy) %}
+<div class="cards two">
+  {% if not j.reversed_by and j.kind != "close" %}
+  <form method="post" action="{{ url_for('ui.journal_reverse', slug=client.slug, jfy=jfy, number=j.number) }}" class="card"
+        data-confirm="Post a reversing journal for {{ j.number }}?">
+    {{ m.csrf() }}
+    <h3>Reverse</h3>
+    <p class="help">Posts the same lines with debits and credits swapped - e.g. to reverse an accrual next year.</p>
+    <label for="on">Reversal date</label>
+    <input id="on" name="on" value="{{ reverse_on|dmy }}" class="date">
+    <button class="btn">Reverse</button>
+  </form>
+  {% endif %}
+  <form method="post" action="{{ url_for('ui.journal_void', slug=client.slug, jfy=jfy, number=j.number) }}" class="card"
+        data-confirm="Void {{ j.number }}? It will stop affecting every balance and report.">
+    {{ m.csrf() }}
+    <h3>Void</h3>
+    <p class="help">The journal stays on file, marked void, and stops affecting balances.</p>
+    <label for="reason">Reason</label>
+    <input id="reason" name="reason" required placeholder="e.g. entered twice">
+    <button class="btn danger">Void</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}
