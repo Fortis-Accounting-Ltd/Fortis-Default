@@ -130,13 +130,30 @@ if ($TestUpdate) {
     if ($cur.bad -notmatch "this update is broken") { throw "the broken update was not set aside ($($cur.bad))" }
 }
 
-Write-Host "5. Installing again over the top (an upgrade) works"
+Write-Host "5. Installing again over the top (an upgrade) works, with Claude's connector running as Claude Desktop keeps it"
+$psi = New-Object System.Diagnostics.ProcessStartInfo $connector
+$psi.UseShellExecute = $false
+$psi.RedirectStandardInput = $true          # held open, as Claude Desktop does: the connector waits for messages
+$psi.RedirectStandardOutput = $true
+$psi.CreateNoWindow = $true
+$claude = [System.Diagnostics.Process]::Start($psi)
+Start-Sleep -Seconds 3
+if ($claude.HasExited) { throw "the Claude connector stopped by itself (exit $($claude.ExitCode))" }
 Install-Once
+if (-not $claude.WaitForExit(30000)) { $claude.Kill(); throw "Setup left Claude's connector running" }
 if (-not (Test-Path $exe)) { throw "the upgrade removed the program" }
+$version = (& $connector --version | Out-String).Trim()
+Write-Host "   Setup closed the running connector; the program now says $version"
+
+Write-Host "5b. Uninstalling closes Claude's connector too"
+$claude = [System.Diagnostics.Process]::Start($psi)
+Start-Sleep -Seconds 3
+if ($claude.HasExited) { throw "the Claude connector stopped by itself (exit $($claude.ExitCode))" }
 
 Write-Host "6. Uninstall: the program and its icons go, the person's settings stay"
 $uninstaller = Join-Path $dir "unins000.exe"
 Start-Process -FilePath $uninstaller -Wait -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART")
+if (-not $claude.WaitForExit(30000)) { $claude.Kill(); throw "the uninstaller left Claude's connector running" }
 Wait-For { -not (Test-Path $exe) } "the uninstaller"
 Wait-For { -not (Test-Path $uninstaller) } "the uninstaller to remove itself"
 foreach ($f in @($appIcon, $xeroIcon, $startMenu)) {

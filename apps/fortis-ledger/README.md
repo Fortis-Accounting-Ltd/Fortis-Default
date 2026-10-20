@@ -124,6 +124,10 @@ WebView2 runtime that comes with Windows 10 and 11.
   works: it replaces the old version, and everything else is kept: the ledger, your settings and your icons.
 - **Uninstalling:** go to Settings > Apps > Fortis Ledger > Uninstall. This removes the program and its
   icons only. The ledger in SharePoint and your settings stay.
+- **Claude Desktop open while installing:** Claude Desktop keeps Claude's connector (`fortis-ledger-mcp`) running
+  in the background. Setup closes it by itself; restart Claude Desktop afterwards so Claude uses the new version.
+  (Installers made before 20 October 2026 stop at *Preparing to Install* and list `fortis-ledger-mcp`: quit Claude
+  Desktop first - right-click its icon by the clock, then Quit - and run Setup again.)
 - **For IT:**
   - To install for everyone on a PC, run the setup from an administrator prompt with `/ALLUSERS`.
   - To install silently, e.g. through Intune, use

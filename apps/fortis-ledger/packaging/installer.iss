@@ -56,7 +56,10 @@ WizardSmallImageFile=installer-top.png,installer-top-2x.png,installer-top-3x.png
 ShowLanguageDialog=no
 Compression=lzma2/max
 SolidCompression=yes
-CloseApplications=yes
+; Claude's connector (fortis-ledger-mcp.exe) is closed by [Code] below; anything else still using the program's files
+; (Fortis Ledger itself) is listed for the person to close, and closed by force if it does not respond
+CloseApplications=force
+CloseApplicationsFilter=*.exe,*.dll,*.pyd
 RestartApplications=no
 SetupLogging=yes
 ChangesAssociations=yes
@@ -66,7 +69,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Messages]
 WelcomeLabel2=This installs [name/ver] on this computer.%n%nThe ledger itself stays in the firm's SharePoint library - this installs only the program, and you do not need administrator rights.
-FinishedLabel=Fortis Ledger is installed. Open it from its desktop icon or the Start menu.
+FinishedLabel=Fortis Ledger is installed. Open it from its desktop icon or the Start menu.%n%nIf Claude Desktop is open, quit it (right-click its icon by the clock, then Quit) and open it again, so Claude uses this version.
 
 [Tasks]
 Name: "desktopicon"; Description: "Fortis Ledger"; GroupDescription: "Put these icons on the desktop:"
@@ -103,3 +106,28 @@ Type: files; Name: "{userdesktop}\{#AppName}.lnk"
 Type: files; Name: "{userdesktop}\{#AppName} - Connect to Xero.lnk"
 ; the updates this person installed (a later install starts from the program's own version)
 Type: filesandordirs; Name: "{localappdata}\{#AppName}\updates"
+
+[Code]
+// Claude Desktop keeps Claude's connector, fortis-ledger-mcp.exe, running in the background while the Fortis Ledger
+// extension is on. It has no window, so Windows cannot ask it to close, and it holds no work of its own: close it
+// before its files are replaced or removed. Claude Desktop starts the new one when it is next opened.
+procedure CloseClaudeConnector;
+var
+  ResultCode: Integer;
+begin
+  if Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM fortis-ledger-mcp.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    if ResultCode = 0 then
+      Sleep(500);   // one was running: let Windows release its files
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  CloseClaudeConnector;
+  Result := '';
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+    CloseClaudeConnector;
+end;

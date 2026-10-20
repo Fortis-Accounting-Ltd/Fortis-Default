@@ -360,5 +360,9 @@ def test_installer_script_matches_the_app():
         for f in files.split(","):
             assert (packaging / f.strip()).is_file(), f
     assert (packaging / "fortis-ledger.ico").is_file()
+    # Setup closes Claude's connector (Claude Desktop keeps it running), named as the build names it
+    assert 'name="fortis-ledger-mcp"' in (packaging / "fortis-ledger.spec").read_text(encoding="utf-8")
+    assert "'/F /IM fortis-ledger-mcp.exe'" in iss and "function PrepareToInstall" in iss
+    assert "CloseApplications=force" in iss and "CurUninstallStep = usUninstall" in iss
     # Windows' version resource takes numbers only
     assert re.fullmatch(r"\d+(\.\d+){0,3}", __version__)
